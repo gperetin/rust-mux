@@ -1,0 +1,8 @@
+[package]
+name = "mux"
+version = "0.1.0"
+authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
+
+[dependencies]
+nom = "~1.1.0"
+

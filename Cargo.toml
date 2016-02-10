@@ -1,0 +1,10 @@
+[package]
+name = "rust-mux"
+version = "0.1.0"
+authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
+
+[dependencies.sharedbuffer]
+path = "./deps/sharedbuffer/"
+
+[dependencies.mux]
+path = "./deps/mux/"
