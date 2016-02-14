@@ -1,8 +1,11 @@
 [package]
-name = "mux"
+name = "sharedbuffer"
 version = "0.1.0"
 authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 
+license = "apache-2.0"
+
+description = "shared buffer"
+
 [dependencies]
-nom = "~1.1.0"
 

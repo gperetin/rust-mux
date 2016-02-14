@@ -3,8 +3,11 @@ name = "rust-mux"
 version = "0.1.0"
 authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 
+[dependencies]
+byteorder = "0.4.2"
+
 [dependencies.sharedbuffer]
-path = "./deps/sharedbuffer/"
+path = "./lib/sharedbuffer/"
 
 [dependencies.mux]
-path = "./deps/mux/"
+path = "./lib/mux/"
