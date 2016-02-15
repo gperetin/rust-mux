@@ -7,7 +7,15 @@ use std::io::{Seek, Read, SeekFrom};
 
 use byteorder::{ReadBytesExt, BigEndian};
 
-pub type DecodeResult<T> = Result<T, DecodeFail>;
+pub type Contexts = Vec<(Vec<u8>,Vec<u8>)>;
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    Error(std::io::Error),
+    Incomplete(Option<usize>),
+}
 
 // extract a value from the byteorder::Result
 macro_rules! tryb {
@@ -15,10 +23,10 @@ macro_rules! tryb {
         match $e { 
             Ok(r) => r, 
             Err(byteorder::Error::UnexpectedEOF) => {
-                return Err(DecodeFail::Incomplete(None))
+                return Err(Error::Incomplete(None))
             }
             Err(byteorder::Error::Io(err)) => {
-                return Err(DecodeFail::Error(err))
+                return Err(Error::Error(err))
             }
         }
     )
@@ -29,15 +37,9 @@ macro_rules! tryi {
     ($e:expr) => (
         match $e {
             Ok(r) => r,
-            Err(err) => return Err(DecodeFail::Error(err)),
+            Err(err) => return Err(Error::Error(err)),
         }
     )
-}
-
-#[derive(Debug)]
-pub enum DecodeFail {
-    Error(std::io::Error),
-    Incomplete(Option<usize>),
 }
 
 pub struct Tag {
@@ -71,14 +73,14 @@ pub struct Message {
 
 pub enum MessageFrame {
     Tdispatch {
-        contexts: Vec<(Vec<u8>, Vec<u8>)>,
+        contexts: Contexts,
         dest    : String,
         dtable  : DTable,
         body    : SharedReadBuffer,
     },
 }
 
-pub fn decode_frame(id: i8, tag: Tag, buffer: SharedReadBuffer) -> DecodeResult<Message> {
+pub fn decode_frame(id: i8, tag: Tag, buffer: SharedReadBuffer) -> Result<Message> {
     let frame = try!(match id {
         2 => frames::decode_tdispatch(buffer),
         _ => panic!("Not implemented")
@@ -87,9 +89,9 @@ pub fn decode_frame(id: i8, tag: Tag, buffer: SharedReadBuffer) -> DecodeResult<
     Ok(Message { tag: tag, frame: frame })
 }
 
-pub fn decode_message_frame(input: &mut SharedReadBuffer) -> DecodeResult<Message> {
+pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
     if input.remaining() < 8 {
-        return Err(DecodeFail::Incomplete(None));
+        return Err(Error::Incomplete(None));
     }
 
     // shoudln't fail, we already ensured the bytes where available
@@ -97,7 +99,7 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> DecodeResult<Messag
 
     if (size as usize) > input.remaining() - 4 {
         tryi!(input.seek(SeekFrom::Current(-4)));
-        return Err(DecodeFail::Incomplete(None));
+        return Err(Error::Incomplete(None));
     }
 
     let buff_size = size - 4;
