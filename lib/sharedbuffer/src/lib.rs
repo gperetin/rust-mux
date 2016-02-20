@@ -74,7 +74,7 @@ impl SharedReadBuffer {
   }
 }
 
-impl std::io::Read for SharedReadBuffer {
+impl io::Read for SharedReadBuffer {
   fn read(&mut self, buff: &mut [u8]) -> io::Result<usize> {
     let to_read = cmp::min(buff.len(), self.limit - self.pos);
     // copy the bytes
@@ -87,7 +87,7 @@ impl std::io::Read for SharedReadBuffer {
   }
 }
 
-impl std::io::Seek for SharedReadBuffer {
+impl io::Seek for SharedReadBuffer {
   fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
 
     let next_pos: i64 = match pos {
@@ -97,7 +97,7 @@ impl std::io::Seek for SharedReadBuffer {
     };
 
     if next_pos < (self.offset as i64) {
-      Err(std::io::Error::new(ErrorKind::InvalidInput, 
+      Err(io::Error::new(ErrorKind::InvalidInput, 
              "Invalid seek to a negative position"))
     } else {
       let next_pos = cmp::min(next_pos as usize, self.limit);
