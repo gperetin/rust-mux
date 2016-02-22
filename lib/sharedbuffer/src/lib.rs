@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::cmp;
 
 use std::io;
+use std::ops::Deref;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
 /* TODO: this would be better if we didn't indirect twice to the data
@@ -19,6 +20,14 @@ pub struct SharedReadBuffer {
   limit: usize   // absolute end
 }
 
+impl Deref for SharedReadBuffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl SharedReadBuffer {
   pub fn new(buffer: Vec<u8>) -> SharedReadBuffer {
     let lim = buffer.len();
@@ -29,6 +38,10 @@ impl SharedReadBuffer {
       pos: 0,
       limit: lim
     }
+  }
+
+  pub fn as_bytes(&self) -> &[u8] {
+    &self.inner[self.pos..self.limit]
   }
 
   pub fn consume_slice(&mut self, length: usize) -> io::Result<SharedReadBuffer> {
