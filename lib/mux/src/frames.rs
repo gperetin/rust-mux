@@ -11,9 +11,9 @@ use std::io::{ErrorKind, Read, Write};
 use sharedbuffer::SharedReadBuffer;
 use super::*;
 
-use std::u16;
+use std::{i16, u16};
 
-fn encode_contexts<W: Write>(buffer: &mut W, contexts: &Contexts) -> Result<()> {
+fn encode_contexts<W: Write + ?Sized>(buffer: &mut W, contexts: &Contexts) -> Result<()> {
     // TODO: these shouldn't be asserts.
     assert!(contexts.len() <= u16::MAX as usize);
     tryb!(buffer.write_u16::<BigEndian>(contexts.len() as u16));
@@ -32,7 +32,7 @@ fn encode_contexts<W: Write>(buffer: &mut W, contexts: &Contexts) -> Result<()> 
     Ok(())
 }
 
-fn decode_contexts<R: Read>(buffer: &mut R) -> Result<Contexts> {
+fn decode_contexts<R: Read + ?Sized>(buffer: &mut R) -> Result<Contexts> {
     let len = tryb!(buffer.read_u16::<BigEndian>());
 
     let mut acc = Vec::new();
@@ -51,7 +51,7 @@ fn decode_contexts<R: Read>(buffer: &mut R) -> Result<Contexts> {
     Ok(acc)
 }
 
-fn decode_dtable<R: Read>(buffer: &mut R) -> Result<DTable> {
+fn decode_dtable<R: Read + ?Sized>(buffer: &mut R) -> Result<DTable> {
     let ctxs : Vec<(Vec<u8>,Vec<u8>)> = try!(decode_contexts(buffer));
     
     let mut acc = Vec::with_capacity(ctxs.len());
@@ -65,6 +65,16 @@ fn decode_dtable<R: Read>(buffer: &mut R) -> Result<DTable> {
     Ok(DTable{ entries: acc })
 }
 
+fn encode_dtable<R: Write + ?Sized>(buffer: &mut R, table: &DTable) -> Result<()> {
+    tryb!(buffer.write_i16::<BigEndian>(table.entries.len() as i16));
+
+    for &(ref k, ref v) in &table.entries {
+        try!(encode_string(buffer, k));
+        try!(encode_string(buffer, v));
+    }
+    Ok(())
+}
+
 fn to_string(vec: Vec<u8>) -> Result<String> {
     match String::from_utf8(vec) {
         Ok(s) => Ok(s),
@@ -75,7 +85,7 @@ fn to_string(vec: Vec<u8>) -> Result<String> {
 }
 
 // decode a utf8 string with length specified by a u16 prefix byte
-fn decode_string<R: Read>(buffer: &mut R) -> Result<String> {
+fn decode_string<R: Read + ?Sized>(buffer: &mut R) -> Result<String> {
     let str_len = tryb!(buffer.read_u16::<BigEndian>());
     let mut s = vec![0; str_len as usize];
 
@@ -84,6 +94,16 @@ fn decode_string<R: Read>(buffer: &mut R) -> Result<String> {
     to_string(s)
 }
 
+#[inline]
+fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &String) -> Result<()> {
+    let bytes = s.as_bytes();
+    assert!(bytes.len() <= i16::MAX as usize);
+    tryb!(buffer.write_i16::<BigEndian>(bytes.len() as i16));
+    tryi!(buffer.write_all(bytes));
+    Ok(())
+}
+
+// Expects to receive a SharedReadBuffer that consists of the entire message
 pub fn decode_tdispatch(mut buffer: SharedReadBuffer) -> Result<MessageFrame> {
     let contexts = try!(decode_contexts(&mut buffer));
 
@@ -91,11 +111,20 @@ pub fn decode_tdispatch(mut buffer: SharedReadBuffer) -> Result<MessageFrame> {
     let dtable = try!(decode_dtable(&mut buffer));
     let body = buffer.consume_remaining();
 
-    Ok(MessageFrame::Tdispatch {
+    Ok(MessageFrame::Tdispatch(Tdispatch {
         contexts: contexts,
         dest: dest,
         dtable: dtable,
         body: body,
-    })
+    }))
 }
 
+pub fn encode_tdispatch(buffer: &mut Write, msg: &Tdispatch) -> Result<()> {
+    
+    try!(encode_contexts(buffer, &msg.contexts));
+    try!(encode_string(buffer, &msg.dest));
+    try!(encode_dtable(buffer, &msg.dtable));
+    tryi!(buffer.write_all(&msg.body));
+
+    Ok(())
+}
