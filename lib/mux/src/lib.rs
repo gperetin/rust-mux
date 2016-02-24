@@ -42,6 +42,7 @@ macro_rules! tryi {
     )
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Tag {
     pub end: bool,
     pub id: u32,
@@ -107,16 +108,23 @@ impl Tdispatch {
     }
 }
 
+#[inline]
+pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
+    let endbit = if tag.end { 1 } else { 0 };
+    let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7), 
+               (tag.id >>  8 & 0xff) as u8, 
+               (tag.id & 0xff)       as u8];
+
+    tryi!(buffer.write_all(&bts));
+    Ok(())
+}
+
 pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
     // the size is the buffer size + the header (id + tag)
     tryb!(buffer.write_i32::<BigEndian>(msg.frame.frame_size() as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
-    let bts = [(msg.tag.id >> 16 & 0xff) as u8 & (1 << 7), 
-               (msg.tag.id >>  8 & 0xff) as u8, 
-               (msg.tag.id & 0xff)       as u8];
-
-    tryi!(buffer.write_all(&bts));
-
+    try!(encode_tag(buffer, &msg.tag));
+    
     encode_frame(buffer, &msg.frame)
 }
 
@@ -161,11 +169,11 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
     Ok(Message { tag: tag, frame: frame })
 }
 
-fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
+pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
     let mut bts = [0; 3];
     let _ = tryi!(r.read(&mut bts));
 
-    let id = (!(1 << 23)) &  // clear the last bit
+    let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
             ((bts[0] as u32) << 16 | 
              (bts[1] as u32) <<  8 | 
              (bts[2] as u32));
@@ -176,12 +184,7 @@ fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
     })
 }
 
-#[test]
-fn it_works() {
-    let a = Some(4);
-    if let Some(4) = a {
-        println!("It is the number 4!");
-    }
-}
+pub mod frames;
 
-mod frames;
+#[cfg(test)]
+mod tests;
