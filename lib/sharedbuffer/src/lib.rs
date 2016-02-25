@@ -96,7 +96,8 @@ impl io::Read for SharedReadBuffer {
     let to_read = cmp::min(buff.len(), self.limit - self.pos);
     // copy the bytes
     unsafe {
-      std::ptr::copy(self.inner.as_ptr(), buff.as_mut_ptr(), to_read);
+        let ptr = self.inner.as_ptr().offset(self.pos as isize);
+        std::ptr::copy(ptr, buff.as_mut_ptr(), to_read);
     }
     self.pos += to_read;
 
@@ -122,6 +123,22 @@ impl io::Seek for SharedReadBuffer {
       Ok(self.pos() as u64)
     }
   }
+}
+
+#[test]
+fn read() {
+  use std::io::Read;
+
+  let v = vec![0,1,2,3];
+  let mut b = SharedReadBuffer::new(v);
+
+  let mut bts = [0;2];
+  b.read(&mut bts).unwrap();
+
+  assert_eq!(&bts, &[0,1]);
+
+  b.read(&mut bts).unwrap();
+  assert_eq!(&bts, &[2,3]);
 }
 
 #[test]
