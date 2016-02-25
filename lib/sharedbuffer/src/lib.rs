@@ -12,7 +12,7 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom};
  * but that would require our own version of Arc and Vec... It shouldn't 
  * be that bad but its just not important right now.
  */
-#[derive(Clone, Debug)]
+#[derive(Eq,PartialEq,Clone,Debug)]
 pub struct SharedReadBuffer {
   inner: Arc<Vec<u8>>,
   offset: usize, // lower limit of where we can look
@@ -29,6 +29,10 @@ impl Deref for SharedReadBuffer {
 }
 
 impl SharedReadBuffer {
+    pub fn empty() -> SharedReadBuffer {
+        SharedReadBuffer::new(Vec::new())
+    }
+
   pub fn new(buffer: Vec<u8>) -> SharedReadBuffer {
     let lim = buffer.len();
 

@@ -48,6 +48,7 @@ pub struct Tag {
     pub id: u32,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct DTable {
     pub entries: Vec<(String,String)>
 }
@@ -61,11 +62,22 @@ pub enum MessageFrame {
     Tdispatch(Tdispatch)
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Tdispatch {
     pub contexts: Contexts,
     pub dest    : String,
     pub dtable  : DTable,
     pub body    : SharedReadBuffer,
+}
+
+impl DTable {
+    pub fn new() -> DTable {
+        DTable { entries: Vec::new() }
+    }
+
+    pub fn add_entry(&mut self, key: String, value: String) {
+        self.entries.push((key,value));
+    }
 }
 
 impl MessageFrame {
@@ -136,10 +148,10 @@ fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
 }
 
 pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
-    match id {
-        2 => frames::decode_tdispatch(buffer),
+    Ok(match id {
+        2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
         _ => panic!("Not implemented")
-    }
+    })
 }
 
 pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
