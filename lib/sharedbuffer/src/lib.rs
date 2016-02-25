@@ -3,29 +3,23 @@
 
 use std::sync::Arc;
 use std::cmp;
+use std::fmt;
 
 use std::io;
 use std::ops::Deref;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
+
 /* TODO: this would be better if we didn't indirect twice to the data
  * but that would require our own version of Arc and Vec... It shouldn't 
  * be that bad but its just not important right now.
  */
-#[derive(Eq,PartialEq,Clone,Debug)]
+#[derive(Clone,Debug)]
 pub struct SharedReadBuffer {
   inner: Arc<Vec<u8>>,
   offset: usize, // lower limit of where we can look
   pos: usize,    // absolute position
   limit: usize   // absolute end
-}
-
-impl Deref for SharedReadBuffer {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
-        self.as_bytes()
-    }
 }
 
 impl SharedReadBuffer {
@@ -90,6 +84,32 @@ impl SharedReadBuffer {
     f(&mut image)
   }
 }
+
+impl fmt::Display for SharedReadBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SharedReadBuffer(length: {}, pos: {})", 
+               self.len(), self.pos())
+    }
+}
+
+impl cmp::Eq for SharedReadBuffer {}
+
+impl cmp::PartialEq for SharedReadBuffer {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() &&
+        self.pos() == other.pos() &&
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl Deref for SharedReadBuffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 
 impl io::Read for SharedReadBuffer {
   fn read(&mut self, buff: &mut [u8]) -> io::Result<usize> {

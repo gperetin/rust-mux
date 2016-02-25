@@ -86,7 +86,6 @@ fn to_string(vec: Vec<u8>) -> Result<String> {
 // decode a utf8 string with length specified by a u16 prefix byte
 fn decode_string<R: Read + ?Sized>(buffer: &mut R) -> Result<String> {
     let str_len = tryb!(buffer.read_u16::<BigEndian>());
-    println!("Len: {}", str_len);
     let mut s = vec![0; str_len as usize];
 
     tryi!(buffer.read_exact(&mut s));
@@ -106,9 +105,7 @@ fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> Result<()> {
 // Expects to receive a SharedReadBuffer that consists of the entire message
 pub fn decode_tdispatch(mut buffer: SharedReadBuffer) -> Result<Tdispatch> {
     let contexts = try!(decode_contexts(&mut buffer));
-    println!("Buffer: {:?}", &buffer);
     let dest = try!(decode_string(&mut buffer));
-    println!("Buffer: {:?}", &buffer);
     let dtable = try!(decode_dtable(&mut buffer));
     let body = buffer.consume_remaining();
 
