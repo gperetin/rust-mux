@@ -102,6 +102,12 @@ fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn decode_rerr(mut buffer: SharedReadBuffer) -> Result<String> {
+    let mut data = vec![0;buffer.remaining()];
+    tryi!(buffer.read_exact(&mut data));
+    to_string(data)
+}
+
 pub fn encode_init(buffer: &mut Write, msg: &Init) -> Result<()> {
     tryb!(buffer.write_i16::<BigEndian>(msg.version));
 

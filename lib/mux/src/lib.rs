@@ -63,6 +63,11 @@ pub enum MessageFrame {
     Rdispatch(Rdispatch),
     TInit(Init),
     RInit(Init),
+    TDrain,
+    RDrain,
+    TPing,
+    RPing,
+    RErr(String),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -122,6 +127,11 @@ impl MessageFrame {
             &MessageFrame::Rdispatch(ref f) => f.frame_size(),
             &MessageFrame::TInit(ref f) => f.frame_size(),
             &MessageFrame::RInit(ref f) => f.frame_size(),
+            &MessageFrame::TDrain => 0,
+            &MessageFrame::RDrain => 0,
+            &MessageFrame::TPing  => 0,
+            &MessageFrame::RPing  => 0,
+            &MessageFrame::RErr(ref msg) => msg.as_bytes().len(),
         }
     }
 
@@ -131,6 +141,11 @@ impl MessageFrame {
             &MessageFrame::Rdispatch(_) => -2,
             &MessageFrame::TInit(_) =>  68,
             &MessageFrame::RInit(_) => -68,
+            &MessageFrame::TDrain   =>  64,
+            &MessageFrame::RDrain   => -64,
+            &MessageFrame::TPing    =>  65,
+            &MessageFrame::RPing    => -65,
+            &MessageFrame::RErr(_)  => -128,
         }
     }
 }
@@ -181,8 +196,8 @@ impl Rdispatch {
 #[inline]
 pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
     let endbit = if tag.end { 1 } else { 0 };
-    let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7), 
-               (tag.id >>  8 & 0xff) as u8, 
+    let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7),
+               (tag.id >>  8 & 0xff) as u8,
                (tag.id & 0xff)       as u8];
 
     tryi!(buffer.write_all(&bts));
@@ -199,12 +214,19 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
 }
 
 fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
-
     match frame {
         &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
         &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
         &MessageFrame::TInit(ref f) => frames::encode_init(buffer, f),
         &MessageFrame::RInit(ref f) => frames::encode_init(buffer, f),
+        &MessageFrame::TPing => Ok(()),
+        &MessageFrame::RPing => Ok(()),
+        &MessageFrame::TDrain => Ok(()),
+        &MessageFrame::RDrain => Ok(()),
+        &MessageFrame::RErr(ref msg) => {
+            tryi!(buffer.write_all(msg.as_bytes()));
+            Ok(())
+        }
     }
 }
 
@@ -214,6 +236,11 @@ pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
         -2 => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(buffer))),
         68 => MessageFrame::TInit(try!(frames::decode_init(buffer))),
        -68 => MessageFrame::RInit(try!(frames::decode_init(buffer))),
+        64 => MessageFrame::TDrain,
+       -64 => MessageFrame::RDrain,
+        65 => MessageFrame::TPing,
+       -65 => MessageFrame::RPing,
+      -128 => MessageFrame::RErr(try!(frames::decode_rerr(buffer))),
         _  => panic!("Not implemented")
     })
 }
