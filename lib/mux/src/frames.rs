@@ -102,6 +102,38 @@ fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn encode_init(buffer: &mut Write, msg: &Init) -> Result<()> {
+    tryb!(buffer.write_i16::<BigEndian>(msg.version));
+
+    for &(ref k, ref v) in &msg.headers {
+        tryb!(buffer.write_i32::<BigEndian>(k.len() as i32));
+        tryi!(buffer.write_all(k));
+        tryb!(buffer.write_i32::<BigEndian>(v.len() as i32));
+        tryi!(buffer.write_all(v));
+    }
+
+    Ok(())
+}
+
+pub fn decode_init(mut buffer: SharedReadBuffer) -> Result<Init> {
+    let version = tryb!(buffer.read_i16::<BigEndian>());
+
+    let mut headers = Vec::new();
+    while buffer.remaining() > 0 {
+        let klen = tryb!(buffer.read_i32::<BigEndian>());
+        let mut k = vec![0;klen as usize];
+        tryi!(buffer.read_exact(&mut k));
+
+        let vlen = tryb!(buffer.read_i32::<BigEndian>());
+        let mut v = vec![0;vlen as usize];
+        tryi!(buffer.read_exact(&mut v));
+
+        headers.push((k,v));
+    }
+
+    Ok(Init { version: version, headers: headers })
+}
+
 pub fn encode_rdispatch(buffer: &mut Write, msg: &Rdispatch) -> Result<()> {
     tryb!(buffer.write_i8(msg.status));
     try!(encode_contexts(buffer, &msg.contexts));

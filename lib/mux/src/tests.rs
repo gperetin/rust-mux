@@ -33,6 +33,29 @@ fn roundtrip_rdispatch() {
     });
 
 }
+
+#[test]
+fn roundtrip_init() {
+    fn tester(msg: &Init) {
+        let mut w = new_write();
+        let _ = frames::encode_init(&mut w, msg).unwrap();
+        let w = SharedReadBuffer::new(w.into_inner());
+        let decoded = frames::decode_init(w).unwrap();
+
+        assert_eq!(msg, &decoded);
+    }
+
+    tester(&Init {
+        version: 12,
+        headers: vec![(vec![1,2,3],vec![4,5,6,7])],
+    });
+
+    tester(&Init {
+        version: -1,
+        headers: vec![(vec![43,127], vec![])],
+    });
+}
+
 #[test]
 fn roundtrip_tdispatch() {
     fn tester(msg: &Tdispatch) {

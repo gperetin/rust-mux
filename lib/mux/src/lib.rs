@@ -61,6 +61,8 @@ pub struct Message {
 pub enum MessageFrame {
     Tdispatch(Tdispatch),
     Rdispatch(Rdispatch),
+    TInit(Init),
+    RInit(Init),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -76,6 +78,24 @@ pub struct Rdispatch {
     pub status  : i8,
     pub contexts: Contexts,
     pub body    : SharedReadBuffer,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Init {
+    pub version: i16,
+    pub headers: Contexts,
+}
+
+impl Init {
+    pub fn frame_size(&self) -> usize {
+        let mut size = 2; // version
+
+        for &(ref k, ref v) in &self.headers {
+            // each value preceeded by its len (i32)
+            size += 8 + k.len() + v.len();
+        }
+        size
+    }
 }
 
 impl DTable {
@@ -100,13 +120,17 @@ impl MessageFrame {
         match self {
             &MessageFrame::Tdispatch(ref f) => f.frame_size(),
             &MessageFrame::Rdispatch(ref f) => f.frame_size(),
+            &MessageFrame::TInit(ref f) => f.frame_size(),
+            &MessageFrame::RInit(ref f) => f.frame_size(),
         }
     }
 
     pub fn frame_id(&self) -> i8 {
         match self {
-            &MessageFrame::Tdispatch(_) => 2,
+            &MessageFrame::Tdispatch(_) =>  2,
             &MessageFrame::Rdispatch(_) => -2,
+            &MessageFrame::TInit(_) =>  68,
+            &MessageFrame::RInit(_) => -68,
         }
     }
 }
@@ -179,13 +203,17 @@ fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
     match frame {
         &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
         &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
+        &MessageFrame::TInit(ref f) => frames::encode_init(buffer, f),
+        &MessageFrame::RInit(ref f) => frames::encode_init(buffer, f),
     }
 }
 
 pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
     Ok(match id {
-        2  => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
+         2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
         -2 => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(buffer))),
+        68 => MessageFrame::TInit(try!(frames::decode_init(buffer))),
+       -68 => MessageFrame::RInit(try!(frames::decode_init(buffer))),
         _  => panic!("Not implemented")
     })
 }
