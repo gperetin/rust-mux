@@ -10,6 +10,30 @@ fn new_write() -> io::Cursor<Vec<u8>> {
 }
 
 #[test]
+fn roundtrip_rdispatch() {
+    fn tester(msg: &Rdispatch) {
+        let mut w = new_write();
+        let _ = frames::encode_rdispatch(&mut w, msg).unwrap();
+        let w = SharedReadBuffer::new(w.into_inner());
+        let decoded = frames::decode_rdispatch(w).unwrap();
+
+        assert_eq!(msg, &decoded);
+    }
+
+    tester(&Rdispatch {
+        status  : 2,
+        contexts: vec![(vec![1,2,3],vec![4,5,6])],
+        body    : SharedReadBuffer::new(vec![1,2,3]),
+    });
+
+    tester(&Rdispatch {
+        status  : -1,
+        contexts: Vec::new(),
+        body    : SharedReadBuffer::empty(),
+    });
+
+}
+#[test]
 fn roundtrip_tdispatch() {
     fn tester(msg: &Tdispatch) {
         let mut w = new_write();
@@ -18,8 +42,14 @@ fn roundtrip_tdispatch() {
         let decoded = frames::decode_tdispatch(w).unwrap();
 
         assert_eq!(msg, &decoded);
-
     }
+
+    tester(&Tdispatch {
+        contexts: vec![(vec![1,2,3],vec![4,5,6])],
+        dest    : "foo".to_string(),
+        dtable  : DTable::from(vec![("foo".to_string(),"bar".to_string())]),
+        body    : SharedReadBuffer::new(vec![1,2,3]),
+    });
 
     tester(&Tdispatch {
         contexts: Vec::new(),
@@ -27,6 +57,7 @@ fn roundtrip_tdispatch() {
         dtable  : DTable::new(),
         body    : SharedReadBuffer::empty(),
     });
+
 }
 
 #[test]

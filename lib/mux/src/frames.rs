@@ -102,6 +102,26 @@ fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn encode_rdispatch(buffer: &mut Write, msg: &Rdispatch) -> Result<()> {
+    tryb!(buffer.write_i8(msg.status));
+    try!(encode_contexts(buffer, &msg.contexts));
+    tryi!(buffer.write_all(&msg.body));
+
+    Ok(())
+}
+
+pub fn decode_rdispatch(mut buffer: SharedReadBuffer) -> Result<Rdispatch> {
+    let status = tryb!(buffer.read_i8());
+    let contexts = try!(decode_contexts(&mut buffer));
+    let body = buffer.consume_remaining();
+
+    Ok( Rdispatch {
+        status: status,
+        contexts: contexts,
+        body: body
+    })
+}
+
 // Expects to receive a SharedReadBuffer that consists of the entire message
 pub fn decode_tdispatch(mut buffer: SharedReadBuffer) -> Result<Tdispatch> {
     let contexts = try!(decode_contexts(&mut buffer));
@@ -116,6 +136,7 @@ pub fn decode_tdispatch(mut buffer: SharedReadBuffer) -> Result<Tdispatch> {
         body: body,
     })
 }
+
 
 pub fn encode_tdispatch(buffer: &mut Write, msg: &Tdispatch) -> Result<()> {
     try!(encode_contexts(buffer, &msg.contexts));

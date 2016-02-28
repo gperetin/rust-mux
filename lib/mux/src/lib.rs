@@ -59,7 +59,8 @@ pub struct Message {
 }
 
 pub enum MessageFrame {
-    Tdispatch(Tdispatch)
+    Tdispatch(Tdispatch),
+    Rdispatch(Rdispatch),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -70,11 +71,25 @@ pub struct Tdispatch {
     pub body    : SharedReadBuffer,
 }
 
+#[derive(PartialEq, Eq, Debug)]
+pub struct Rdispatch {
+    pub status  : i8,
+    pub contexts: Contexts,
+    pub body    : SharedReadBuffer,
+}
+
 impl DTable {
+    #[inline]
     pub fn new() -> DTable {
-        DTable { entries: Vec::new() }
+        DTable::from(Vec::new())
     }
 
+    #[inline]
+    pub fn from(entries: Vec<(String,String)>) -> DTable {
+        DTable { entries: entries }
+    }
+
+    #[inline]
     pub fn add_entry(&mut self, key: String, value: String) {
         self.entries.push((key,value));
     }
@@ -83,40 +98,59 @@ impl DTable {
 impl MessageFrame {
     pub fn frame_size(&self) -> usize {
         match self {
-            &MessageFrame::Tdispatch(ref f) => f.frame_size()
+            &MessageFrame::Tdispatch(ref f) => f.frame_size(),
+            &MessageFrame::Rdispatch(ref f) => f.frame_size(),
         }
     }
 
     pub fn frame_id(&self) -> i8 {
         match self {
-            &MessageFrame::Tdispatch(_) => 2
+            &MessageFrame::Tdispatch(_) => 2,
+            &MessageFrame::Rdispatch(_) => -2,
         }
     }
 }
 
+#[inline]
+fn context_size(contexts: &Contexts) -> usize {
+    let mut size = 2; // context size
+
+    for &(ref k, ref v) in contexts {
+        size += 4; // two lengths
+        size += k.len();
+        size += v.len();
+    }
+    size
+}
+
+#[inline]
+fn dtable_size(table: &DTable) -> usize {
+    let mut size = 2; // context size
+
+    for &(ref k, ref v) in &table.entries {
+        size += 4; // the two lengths
+        size += k.as_bytes().len();
+        size += v.as_bytes().len();
+    }
+
+    size
+}
+
 impl Tdispatch {
     fn frame_size(&self) -> usize {
-        let mut size = 2 + // context size
-                       2 + // dest size
-                       2;  // dtab size
-
-        for &(ref k, ref v) in &self.contexts {
-            size += 4; // two lengths
-            size += k.len();
-            size += v.len();
-        }
+        let mut size = 2 + // dest size
+                       context_size(&self.contexts) +
+                       dtable_size(&self.dtable);
 
         size += self.dest.as_bytes().len();
-
-        for &(ref k, ref v) in &self.dtable.entries {
-            size += 4; // the two lengths
-            size += k.as_bytes().len();
-            size += v.as_bytes().len();
-        }
-
         size += self.body.remaining();
-
         size
+    }
+}
+
+impl Rdispatch {
+    fn frame_size(&self) -> usize {
+        1 + context_size(&self.contexts) + self.body.remaining()
     }
 }
 
@@ -144,13 +178,15 @@ fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
 
     match frame {
         &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
+        &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
     }
 }
 
 pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
     Ok(match id {
-        2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
-        _ => panic!("Not implemented")
+        2  => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
+        -2 => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(buffer))),
+        _  => panic!("Not implemented")
     })
 }
 
