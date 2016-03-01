@@ -3,11 +3,12 @@ extern crate sharedbuffer;
 
 use sharedbuffer::SharedReadBuffer;
 
+use std::io;
 use std::io::{Seek, Read, SeekFrom, Write};
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
-pub type Contexts = Vec<(Vec<u8>,Vec<u8>)>;
+pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -20,8 +21,8 @@ pub enum Error {
 // extract a value from the byteorder::Result
 macro_rules! tryb {
     ($e:expr) => (
-        match $e { 
-            Ok(r) => r, 
+        match $e {
+            Ok(r) => r,
             Err(byteorder::Error::UnexpectedEOF) => {
                 return Err(Error::Incomplete(None))
             }
@@ -50,7 +51,7 @@ pub struct Tag {
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct DTable {
-    pub entries: Vec<(String,String)>
+    pub entries: Vec<(String, String)>,
 }
 
 pub struct Message {
@@ -73,16 +74,16 @@ pub enum MessageFrame {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Tdispatch {
     pub contexts: Contexts,
-    pub dest    : String,
-    pub dtable  : DTable,
-    pub body    : SharedReadBuffer,
+    pub dest: String,
+    pub dtable: DTable,
+    pub body: SharedReadBuffer,
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Rdispatch {
-    pub status  : i8,
+    pub status: i8,
     pub contexts: Contexts,
-    pub body    : SharedReadBuffer,
+    pub body: SharedReadBuffer,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -90,6 +91,21 @@ pub struct Init {
     pub version: i16,
     pub headers: Contexts,
 }
+
+impl Error {
+    pub fn new<E>(kind: io::ErrorKind, msg: E) -> Error
+        where E: Into<Box<std::error::Error + Send + Sync>>
+    {
+        Error::Error(io::Error::new(kind, msg))
+    }
+
+    pub fn failed<E, R>(kind: io::ErrorKind, msg: E) -> Result<R>
+        where E: Into<Box<std::error::Error + Send + Sync>>
+    {
+        Err(Error::new(kind, msg))
+    }
+}
+
 
 impl Init {
     pub fn frame_size(&self) -> usize {
@@ -110,13 +126,13 @@ impl DTable {
     }
 
     #[inline]
-    pub fn from(entries: Vec<(String,String)>) -> DTable {
+    pub fn from(entries: Vec<(String, String)>) -> DTable {
         DTable { entries: entries }
     }
 
     #[inline]
     pub fn add_entry(&mut self, key: String, value: String) {
-        self.entries.push((key,value));
+        self.entries.push((key, value));
     }
 }
 
@@ -129,23 +145,23 @@ impl MessageFrame {
             &MessageFrame::RInit(ref f) => f.frame_size(),
             &MessageFrame::TDrain => 0,
             &MessageFrame::RDrain => 0,
-            &MessageFrame::TPing  => 0,
-            &MessageFrame::RPing  => 0,
+            &MessageFrame::TPing => 0,
+            &MessageFrame::RPing => 0,
             &MessageFrame::RErr(ref msg) => msg.as_bytes().len(),
         }
     }
 
     pub fn frame_id(&self) -> i8 {
         match self {
-            &MessageFrame::Tdispatch(_) =>  2,
+            &MessageFrame::Tdispatch(_) => 2,
             &MessageFrame::Rdispatch(_) => -2,
-            &MessageFrame::TInit(_) =>  68,
+            &MessageFrame::TInit(_) => 68,
             &MessageFrame::RInit(_) => -68,
-            &MessageFrame::TDrain   =>  64,
-            &MessageFrame::RDrain   => -64,
-            &MessageFrame::TPing    =>  65,
-            &MessageFrame::RPing    => -65,
-            &MessageFrame::RErr(_)  => -128,
+            &MessageFrame::TDrain => 64,
+            &MessageFrame::RDrain => -64,
+            &MessageFrame::TPing => 65,
+            &MessageFrame::RPing => -65,
+            &MessageFrame::RErr(_) => -128,
         }
     }
 }
@@ -195,10 +211,14 @@ impl Rdispatch {
 
 #[inline]
 pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
-    let endbit = if tag.end { 1 } else { 0 };
+    let endbit = if tag.end {
+        1
+    } else {
+        0
+    };
     let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7),
-               (tag.id >>  8 & 0xff) as u8,
-               (tag.id & 0xff)       as u8];
+               (tag.id >> 8 & 0xff) as u8,
+               (tag.id & 0xff) as u8];
 
     tryi!(buffer.write_all(&bts));
     Ok(())
@@ -209,7 +229,7 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
     tryb!(buffer.write_i32::<BigEndian>(msg.frame.frame_size() as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
     try!(encode_tag(buffer, &msg.tag));
-    
+
     encode_frame(buffer, &msg.frame)
 }
 
@@ -232,16 +252,19 @@ fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
 
 pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
     Ok(match id {
-         2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
+        2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
         -2 => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(buffer))),
         68 => MessageFrame::TInit(try!(frames::decode_init(buffer))),
-       -68 => MessageFrame::RInit(try!(frames::decode_init(buffer))),
+        -68 => MessageFrame::RInit(try!(frames::decode_init(buffer))),
         64 => MessageFrame::TDrain,
-       -64 => MessageFrame::RDrain,
+        -64 => MessageFrame::RDrain,
         65 => MessageFrame::TPing,
-       -65 => MessageFrame::RPing,
-      -128 => MessageFrame::RErr(try!(frames::decode_rerr(buffer))),
-        _  => panic!("Not implemented")
+        -65 => MessageFrame::RPing,
+        -128 => MessageFrame::RErr(try!(frames::decode_rerr(buffer))),
+        other => {
+            return Error::failed(io::ErrorKind::InvalidInput,
+                                 format!("Invalid frame id: {}", other));
+        }
     })
 }
 
@@ -269,7 +292,10 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
 
     let frame = try!(decode_frame(tpe, msg_buff));
 
-    Ok(Message { tag: tag, frame: frame })
+    Ok(Message {
+        tag: tag,
+        frame: frame,
+    })
 }
 
 pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
@@ -277,8 +303,8 @@ pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
     let _ = tryi!(r.read(&mut bts));
 
     let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
-            ((bts[0] as u32) << 16 | 
-             (bts[1] as u32) <<  8 | 
+            ((bts[0] as u32) << 16 |
+             (bts[1] as u32) <<  8 |
              (bts[2] as u32));
 
     Ok(Tag {

@@ -21,15 +21,15 @@ fn roundtrip_rdispatch() {
     }
 
     tester(&Rdispatch {
-        status  : 2,
-        contexts: vec![(vec![1,2,3],vec![4,5,6])],
-        body    : SharedReadBuffer::new(vec![1,2,3]),
+        status: 2,
+        contexts: vec![(vec![1, 2, 3], vec![4, 5, 6])],
+        body: SharedReadBuffer::new(vec![1, 2, 3]),
     });
 
     tester(&Rdispatch {
-        status  : -1,
+        status: -1,
         contexts: Vec::new(),
-        body    : SharedReadBuffer::empty(),
+        body: SharedReadBuffer::empty(),
     });
 
 }
@@ -47,12 +47,12 @@ fn roundtrip_init() {
 
     tester(&Init {
         version: 12,
-        headers: vec![(vec![1,2,3],vec![4,5,6,7])],
+        headers: vec![(vec![1, 2, 3], vec![4, 5, 6, 7])],
     });
 
     tester(&Init {
         version: -1,
-        headers: vec![(vec![43,127], vec![])],
+        headers: vec![(vec![43, 127], vec![])],
     });
 }
 
@@ -68,17 +68,17 @@ fn roundtrip_tdispatch() {
     }
 
     tester(&Tdispatch {
-        contexts: vec![(vec![1,2,3],vec![4,5,6])],
-        dest    : "foo".to_string(),
-        dtable  : DTable::from(vec![("foo".to_string(),"bar".to_string())]),
-        body    : SharedReadBuffer::new(vec![1,2,3]),
+        contexts: vec![(vec![1, 2, 3], vec![4, 5, 6])],
+        dest: "foo".to_string(),
+        dtable: DTable::from(vec![("foo".to_string(), "bar".to_string())]),
+        body: SharedReadBuffer::new(vec![1, 2, 3]),
     });
 
     tester(&Tdispatch {
         contexts: Vec::new(),
-        dest    : "foo".to_string(),
-        dtable  : DTable::new(),
-        body    : SharedReadBuffer::empty(),
+        dest: "foo".to_string(),
+        dtable: DTable::new(),
+        body: SharedReadBuffer::empty(),
     });
 
 }
@@ -118,7 +118,7 @@ fn roundtrip_context() {
     }
 
     tester(&Vec::new());
-    tester(&vec![(vec![1,2,3],vec![4,5,6])]);
+    tester(&vec![(vec![1, 2, 3], vec![4, 5, 6])]);
 }
 
 
@@ -131,21 +131,17 @@ fn roundtrip_tag() {
         let decoded = decode_tag(&mut w).unwrap();
 
         assert_eq!(tag, &decoded);
-    } 
+    }
 
     tester(&Tag {
         end: false,
         id: 1,
     });
 
-    tester(&Tag {
-        end: true,
-        id: 1,
-    });
+    tester(&Tag { end: true, id: 1 });
 
     tester(&Tag {
         end: false,
         id: 0x0fffff,
     });
 }
-

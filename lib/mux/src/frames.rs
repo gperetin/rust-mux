@@ -17,7 +17,7 @@ pub fn encode_contexts<W: Write + ?Sized>(buffer: &mut W, contexts: &Contexts) -
     // TODO: these shouldn't be asserts.
     assert!(contexts.len() <= u16::MAX as usize);
     tryb!(buffer.write_u16::<BigEndian>(contexts.len() as u16));
-    
+
     for &(ref k, ref v) in contexts {
         assert!(k.len() <= u16::MAX as usize);
         assert!(v.len() <= u16::MAX as usize);
@@ -45,23 +45,23 @@ pub fn decode_contexts<R: Read + ?Sized>(buffer: &mut R) -> Result<Contexts> {
         let val_len = tryb!(buffer.read_u16::<BigEndian>());
         let mut val = vec![0;val_len as usize];
         tryi!(buffer.read_exact(&mut val[..]));
-        acc.push((key,val));
+        acc.push((key, val));
     }
 
     Ok(acc)
 }
 
 pub fn decode_dtable<R: Read + ?Sized>(buffer: &mut R) -> Result<DTable> {
-    let ctxs : Vec<(Vec<u8>,Vec<u8>)> = try!(decode_contexts(buffer));
+    let ctxs: Vec<(Vec<u8>, Vec<u8>)> = try!(decode_contexts(buffer));
     let mut acc = Vec::with_capacity(ctxs.len());
 
-    for (k,v) in ctxs {
+    for (k, v) in ctxs {
         let k = try!(to_string(k));
         let v = try!(to_string(v));
-        acc.push((k,v));
+        acc.push((k, v));
     }
 
-    Ok(DTable{ entries: acc })
+    Ok(DTable { entries: acc })
 }
 
 pub fn encode_dtable<R: Write + ?Sized>(buffer: &mut R, table: &DTable) -> Result<()> {
@@ -77,9 +77,7 @@ pub fn encode_dtable<R: Write + ?Sized>(buffer: &mut R, table: &DTable) -> Resul
 fn to_string(vec: Vec<u8>) -> Result<String> {
     match String::from_utf8(vec) {
         Ok(s) => Ok(s),
-        Err(_) => Err(Error::Error(
-                      io::Error::new(ErrorKind::Other, "Failed to decode UTF8")
-                      )),
+        Err(_) => Err(Error::Error(io::Error::new(ErrorKind::Other, "Failed to decode UTF8"))),
     }
 }
 
@@ -134,10 +132,13 @@ pub fn decode_init(mut buffer: SharedReadBuffer) -> Result<Init> {
         let mut v = vec![0;vlen as usize];
         tryi!(buffer.read_exact(&mut v));
 
-        headers.push((k,v));
+        headers.push((k, v));
     }
 
-    Ok(Init { version: version, headers: headers })
+    Ok(Init {
+        version: version,
+        headers: headers,
+    })
 }
 
 pub fn encode_rdispatch(buffer: &mut Write, msg: &Rdispatch) -> Result<()> {
@@ -153,10 +154,10 @@ pub fn decode_rdispatch(mut buffer: SharedReadBuffer) -> Result<Rdispatch> {
     let contexts = try!(decode_contexts(&mut buffer));
     let body = buffer.consume_remaining();
 
-    Ok( Rdispatch {
+    Ok(Rdispatch {
         status: status,
         contexts: contexts,
-        body: body
+        body: body,
     })
 }
 
