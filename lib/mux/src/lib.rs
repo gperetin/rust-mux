@@ -54,11 +54,13 @@ pub struct DTable {
     pub entries: Vec<(String, String)>,
 }
 
+#[derive(Debug)]
 pub struct Message {
     pub tag: Tag,
     pub frame: MessageFrame,
 }
 
+#[derive(Debug)]
 pub enum MessageFrame {
     Tdispatch(Tdispatch),
     Rdispatch(Rdispatch),
@@ -90,6 +92,56 @@ pub struct Rdispatch {
 pub struct Init {
     pub version: i16,
     pub headers: Contexts,
+}
+
+impl Message {
+    #[inline]
+    pub fn end(id: u32, frame: MessageFrame) -> Message {
+        Message {
+            tag: Tag::new(true, id),
+            frame: frame,
+        }
+    }
+}
+
+impl Tag {
+    #[inline]
+    pub fn new(end: bool, id: u32) -> Tag {
+        Tag {
+            end: end,
+            id: id,
+        }
+    }
+
+    pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
+        let mut bts = [0; 3];
+        let _ = tryi!(r.read(&mut bts));
+
+        let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
+                ((bts[0] as u32) << 16 |
+                 (bts[1] as u32) <<  8 |
+                 (bts[2] as u32));
+
+        Ok(Tag {
+            end: (1 << 7) & bts[0] != 0,
+            id: id,
+        })
+    }
+
+    #[inline]
+    pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
+        let endbit = if tag.end {
+            1
+        } else {
+            0
+        };
+        let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7),
+                   (tag.id >> 8 & 0xff) as u8,
+                   (tag.id & 0xff) as u8];
+
+        tryi!(buffer.write_all(&bts));
+        Ok(())
+    }
 }
 
 impl Error {
@@ -201,6 +253,17 @@ impl Tdispatch {
         size += self.body.remaining();
         size
     }
+
+    pub fn basic(dest: String, body: SharedReadBuffer) -> MessageFrame {
+        MessageFrame::Tdispatch(
+            Tdispatch {
+                contexts: Vec::new(),
+                dest: dest,
+                dtable: DTable::new(),
+                body: body,
+            }
+        )
+    }
 }
 
 impl Rdispatch {
@@ -209,26 +272,11 @@ impl Rdispatch {
     }
 }
 
-#[inline]
-pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
-    let endbit = if tag.end {
-        1
-    } else {
-        0
-    };
-    let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7),
-               (tag.id >> 8 & 0xff) as u8,
-               (tag.id & 0xff) as u8];
-
-    tryi!(buffer.write_all(&bts));
-    Ok(())
-}
-
 pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
     // the size is the buffer size + the header (id + tag)
     tryb!(buffer.write_i32::<BigEndian>(msg.frame.frame_size() as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
-    try!(encode_tag(buffer, &msg.tag));
+    try!(Tag::encode_tag(buffer, &msg.tag));
 
     encode_frame(buffer, &msg.frame)
 }
@@ -268,7 +316,10 @@ pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
     })
 }
 
-pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
+// TODO: right now we assume we don't have a whole frame.
+//       Maybe thats wrong: this should receive a full mux
+//       message.
+pub fn decode_message(input: &mut SharedReadBuffer) -> Result<Message> {
     if input.remaining() < 8 {
         return Err(Error::Incomplete(None));
     }
@@ -276,7 +327,7 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
     // shoudln't fail, we already ensured the bytes where available
     let size = tryb!(input.read_i32::<BigEndian>());
 
-    if (size as usize) > input.remaining() - 4 {
+    if (size as usize) > input.remaining() {
         tryi!(input.seek(SeekFrom::Current(-4)));
         return Err(Error::Incomplete(None));
     }
@@ -284,7 +335,7 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
     let buff_size = size - 4;
 
     let tpe = tryb!(input.read_i8());
-    let tag = try!(decode_tag(input));
+    let tag = try!(Tag::decode_tag(input));
 
     let msg_buff = tryi!(input.consume_slice(buff_size as usize));
 
@@ -295,21 +346,6 @@ pub fn decode_message_frame(input: &mut SharedReadBuffer) -> Result<Message> {
     Ok(Message {
         tag: tag,
         frame: frame,
-    })
-}
-
-pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
-    let mut bts = [0; 3];
-    let _ = tryi!(r.read(&mut bts));
-
-    let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
-            ((bts[0] as u32) << 16 |
-             (bts[1] as u32) <<  8 |
-             (bts[2] as u32));
-
-    Ok(Tag {
-        end: (1 << 7) & bts[0] != 0,
-        id: id,
     })
 }
 

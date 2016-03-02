@@ -126,9 +126,9 @@ fn roundtrip_context() {
 fn roundtrip_tag() {
     fn tester(tag: &Tag) {
         let mut w = new_write();
-        let _ = encode_tag(&mut w, &tag).unwrap();
+        let _ = Tag::encode_tag(&mut w, &tag).unwrap();
         let mut w = io::Cursor::new(w.into_inner());
-        let decoded = decode_tag(&mut w).unwrap();
+        let decoded = Tag::decode_tag(&mut w).unwrap();
 
         assert_eq!(tag, &decoded);
     }
