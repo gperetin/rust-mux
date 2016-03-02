@@ -1,31 +1,25 @@
-
 extern crate sharedbuffer;
 extern crate byteorder;
 extern crate mux;
 
 use sharedbuffer::SharedReadBuffer;
 
-use byteorder::{ReadBytesExt, BigEndian, ByteOrder};
 use std::net::TcpStream;
 use std::io::{Read, Write};
 
-fn send_request(buffer: &[u8]) {
-    let mut socket = TcpStream::connect(("localhost", 9000)).unwrap();
-    socket.write_all(buffer).unwrap();
+fn test_trequest<S: Read+Write>(socket: &mut S) {
 
-    let mut buf = vec![0; 4];
-    socket.read_exact(&mut buf).unwrap();
-    let frame_size = BigEndian::read_i32(&buf) as usize;
+    let v = "Hello, world!".to_string().into_bytes();
+    let b = SharedReadBuffer::new(v);
 
-    println!("Frame size: {}", frame_size);
-    buf.resize(frame_size+4,0);
+    let frame = mux::Tdispatch::basic("/foo".to_string(), b);
+    let msg = mux::Message::end(1, frame);
 
-    socket.read_exact(&mut buf[4..]).unwrap();
+    let mut buf = Vec::new();
+    mux::encode_message(&mut buf, &msg).unwrap();
+    socket.write_all(&buf).unwrap();
 
-    println!("Read buffer: {:?}", &buf);
-
-    let mut buf = SharedReadBuffer::new(buf);
-    let msg = mux::decode_message(&mut buf).unwrap();
+    let msg = mux::read_message(socket).unwrap();
 
     match &msg.frame {
         &mux::MessageFrame::Rdispatch(ref msg) => {
@@ -33,25 +27,35 @@ fn send_request(buffer: &[u8]) {
             println!("Response: {}", s);
         }
         other => {
-            panic!(format!("Oh no: {:?}", other));
+            panic!(format!("Recieved unexpected frame: {:?}", other));
         }
     }
+}
 
-    // println!("Message: {:?}", &msg);
+fn test_ping<S: Read+Write>(socket: &mut S) {
+    let msg = mux::Message::end(2, mux::MessageFrame::TPing);
+    let mut buf = Vec::new();
+    mux::encode_message(&mut buf, &msg).unwrap();
+
+    socket.write_all(&buf).unwrap();
+
+    let msg = mux::read_message(socket).unwrap();
+    match &msg.frame {
+        &mux::MessageFrame::RPing => {
+            println!("Ping successful!");
+        }
+        other => {
+            panic!(format!("Received unexpected frame: {:?}", other));
+        }
+    }
 }
 
 fn main() {
-  println!("Hello, world!");
 
-  let v = "Hello, world!".to_string().into_bytes();
-  let b = SharedReadBuffer::new(v);
+  let mut socket = TcpStream::connect(("localhost", 9000)).unwrap();
+  println!("Testing ping frame.");
+  test_ping(&mut socket);
 
-  let frame = mux::Tdispatch::basic("/foo".to_string(), b);
-  let msg = mux::Message::end(1, frame);
-
-  let mut buf = Vec::new();
-  mux::encode_message(&mut buf, &msg).unwrap();
-
-  send_request(&buf);
+  println!("Testing TRequest frame.");
+  test_trequest(&mut socket);
 }
-

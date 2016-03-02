@@ -4,7 +4,7 @@ extern crate sharedbuffer;
 use sharedbuffer::SharedReadBuffer;
 
 use std::io;
-use std::io::{Seek, Read, SeekFrom, Write};
+use std::io::{Read, Write};
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
@@ -316,30 +316,35 @@ pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
     })
 }
 
-// TODO: right now we assume we don't have a whole frame.
-//       Maybe thats wrong: this should receive a full mux
-//       message.
-pub fn decode_message(input: &mut SharedReadBuffer) -> Result<Message> {
-    if input.remaining() < 8 {
-        return Err(Error::Incomplete(None));
+// This is a synchronous function that will read a whole message from the `Read`
+pub fn read_message(input: &mut Read) -> Result<Message> {
+    let size = {
+        let size = tryb!(input.read_i32::<BigEndian>());
+        if size < 0 {
+            return Error::failed(io::ErrorKind::InvalidData, "Invalid mux frame size");
+        }
+        size as usize
+    };
+
+    let mut buf = vec![0;size];
+    tryi!(input.read_exact(&mut buf));
+    let buf = SharedReadBuffer::new(buf);
+    decode_message(buf)
+}
+
+// expects a SharedReadBuffer of the whole mux frame
+pub fn decode_message(mut input: SharedReadBuffer) -> Result<Message> {
+    let remaining = input.remaining();
+
+    if remaining < 4 {
+        return Error::failed(io::ErrorKind::InvalidData, "Invalid mux frame size");
     }
-
-    // shoudln't fail, we already ensured the bytes where available
-    let size = tryb!(input.read_i32::<BigEndian>());
-
-    if (size as usize) > input.remaining() {
-        tryi!(input.seek(SeekFrom::Current(-4)));
-        return Err(Error::Incomplete(None));
-    }
-
-    let buff_size = size - 4;
 
     let tpe = tryb!(input.read_i8());
-    let tag = try!(Tag::decode_tag(input));
+    let tag = try!(Tag::decode_tag(&mut input));
 
-    let msg_buff = tryi!(input.consume_slice(buff_size as usize));
-
-    debug_assert_eq!(msg_buff.remaining(), buff_size as usize);
+    let msg_buff = input.consume_remaining();
+    debug_assert_eq!(msg_buff.remaining(), remaining - 4);
 
     let frame = try!(decode_frame(tpe, msg_buff));
 
