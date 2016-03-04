@@ -1,21 +1,35 @@
 extern crate byteorder;
-extern crate sharedbuffer;
-
-use sharedbuffer::SharedReadBuffer;
 
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
+
+use std::time::Duration;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
+pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub mod types {
+    pub const TREQ: i8 = 1;
+    pub const RREQ: i8 = -1;
 
-#[derive(Debug)]
-pub enum Error {
-    Error(std::io::Error),
-    Incomplete(Option<usize>),
+    pub const TDISPATCH: i8 = 2;
+    pub const RDISPATCH: i8 = -2;
+
+    pub const TINIT: i8 = 68;
+    pub const RINIT: i8 = -68;
+
+    pub const TDRAIN: i8 = 64;
+    pub const RDRAIN: i8 = -64;
+
+    pub const TPING: i8 = 65;
+    pub const RPING: i8 = -65;
+
+    pub const TDISCARDED: i8 = 66;
+    pub const TLEASE: i8 = 67;
+
+    pub const RERR: i8 = -128;
 }
 
 // extract a value from the byteorder::Result
@@ -24,73 +38,112 @@ macro_rules! tryb {
         match $e {
             Ok(r) => r,
             Err(byteorder::Error::UnexpectedEOF) => {
-                return Err(Error::Incomplete(None))
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "End of input"
+                ));
             }
             Err(byteorder::Error::Io(err)) => {
-                return Err(Error::Error(err))
+                return Err(err);
             }
         }
     )
 }
 
-// extract a value from the io::Result
-macro_rules! tryi {
-    ($e:expr) => (
-        match $e {
-            Ok(r) => r,
-            Err(err) => return Err(Error::Error(err)),
-        }
-    )
+#[derive(Debug, PartialEq, Eq)]
+pub struct MuxPacket {
+    pub tpe: i8,
+    pub tag: Tag,
+    pub buffer: Vec<u8>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Tag {
     pub end: bool,
     pub id: u32,
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct DTable {
+pub struct Dtab {
     pub entries: Vec<(String, String)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Message {
     pub tag: Tag,
     pub frame: MessageFrame,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MessageFrame {
+    Treq(Treq),
+    Rreq(Rmsg),
     Tdispatch(Tdispatch),
     Rdispatch(Rdispatch),
-    TInit(Init),
-    RInit(Init),
-    TDrain,
-    RDrain,
-    TPing,
-    RPing,
-    RErr(String),
+    Tinit(Init),
+    Rinit(Init),
+    Tdrain,
+    Rdrain,
+    Tping,
+    Rping,
+    Rerr(String),
+    Tlease(Duration),   // Notification of a lease of resources for the specified duration
+    // Tdiscarded(String), // Sent by a client to alert the server of a discarded message
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Treq {
+    pub headers: Headers,
+    pub body: Vec<u8>,
+}
+
+impl Treq {
+    pub fn frame_size(&self) -> usize {
+        let mut size = 1; // header count
+        for &(_, ref v) in &self.headers {
+            size += 2; // key and value lengths
+            size += v.len();
+        }
+
+        size + self.body.len()
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Tdispatch {
     pub contexts: Contexts,
     pub dest: String,
-    pub dtable: DTable,
-    pub body: SharedReadBuffer,
+    pub dtab: Dtab,
+    pub body: Vec<u8>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Rdispatch {
-    pub status: i8,
     pub contexts: Contexts,
-    pub body: SharedReadBuffer,
+    pub msg: Rmsg,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum Rmsg {
+    Ok(Vec<u8>),
+    Error(String),
+    Nack(String),
+}
+
+impl Rmsg {
+    #[inline]
+    pub fn msg_size(&self) -> usize {
+        match self {
+            &Rmsg::Ok(ref b) => b.len(),
+            &Rmsg::Error(ref m) => m.as_bytes().len(),
+            &Rmsg::Nack(ref m) => m.as_bytes().len(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Init {
-    pub version: i16,
+    pub version: u16,
     pub headers: Contexts,
 }
 
@@ -113,9 +166,9 @@ impl Tag {
         }
     }
 
-    pub fn decode_tag<T: Read>(r: &mut T) -> Result<Tag> {
+    pub fn decode_tag(r: &mut Read) -> io::Result<Tag> {
         let mut bts = [0; 3];
-        let _ = tryi!(r.read(&mut bts));
+        let _ = try!(r.read(&mut bts));
 
         let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
                 ((bts[0] as u32) << 16 |
@@ -129,35 +182,20 @@ impl Tag {
     }
 
     #[inline]
-    pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> Result<()> {
-        let endbit = if tag.end {
-            1
-        } else {
-            0
-        };
-        let bts = [(tag.id >> 16 & 0x7f) as u8 | (endbit << 7),
-                   (tag.id >> 8 & 0xff) as u8,
-                   (tag.id & 0xff) as u8];
+    pub fn to_bytes(&self) -> [u8;3] {
+        let endbit = if self.end { 1 } else { 0 };
+        [(self.id >> 16 & 0x7f) as u8 | (endbit << 7),
+            (self.id >> 8 & 0xff) as u8,
+            (self.id >> 0 & 0xff) as u8]
+    }
 
-        tryi!(buffer.write_all(&bts));
+    #[inline]
+    pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> io::Result<()> {
+        let bts = tag.to_bytes();
+        try!(buffer.write_all(&bts));
         Ok(())
     }
 }
-
-impl Error {
-    pub fn new<E>(kind: io::ErrorKind, msg: E) -> Error
-        where E: Into<Box<std::error::Error + Send + Sync>>
-    {
-        Error::Error(io::Error::new(kind, msg))
-    }
-
-    pub fn failed<E, R>(kind: io::ErrorKind, msg: E) -> Result<R>
-        where E: Into<Box<std::error::Error + Send + Sync>>
-    {
-        Err(Error::new(kind, msg))
-    }
-}
-
 
 impl Init {
     pub fn frame_size(&self) -> usize {
@@ -171,15 +209,15 @@ impl Init {
     }
 }
 
-impl DTable {
+impl Dtab {
     #[inline]
-    pub fn new() -> DTable {
-        DTable::from(Vec::new())
+    pub fn new() -> Dtab {
+        Dtab::from(Vec::new())
     }
 
     #[inline]
-    pub fn from(entries: Vec<(String, String)>) -> DTable {
-        DTable { entries: entries }
+    pub fn from(entries: Vec<(String, String)>) -> Dtab {
+        Dtab { entries: entries }
     }
 
     #[inline]
@@ -191,29 +229,35 @@ impl DTable {
 impl MessageFrame {
     pub fn frame_size(&self) -> usize {
         match self {
+            &MessageFrame::Treq(ref f) => f.frame_size(),
+            &MessageFrame::Rreq(ref f) => 1 + f.msg_size(),
             &MessageFrame::Tdispatch(ref f) => f.frame_size(),
             &MessageFrame::Rdispatch(ref f) => f.frame_size(),
-            &MessageFrame::TInit(ref f) => f.frame_size(),
-            &MessageFrame::RInit(ref f) => f.frame_size(),
-            &MessageFrame::TDrain => 0,
-            &MessageFrame::RDrain => 0,
-            &MessageFrame::TPing => 0,
-            &MessageFrame::RPing => 0,
-            &MessageFrame::RErr(ref msg) => msg.as_bytes().len(),
+            &MessageFrame::Tinit(ref f) => f.frame_size(),
+            &MessageFrame::Rinit(ref f) => f.frame_size(),
+            &MessageFrame::Tdrain => 0,
+            &MessageFrame::Rdrain => 0,
+            &MessageFrame::Tping => 0,
+            &MessageFrame::Rping => 0,
+            &MessageFrame::Tlease(_) => 9,
+            &MessageFrame::Rerr(ref msg) => msg.as_bytes().len(),
         }
     }
 
     pub fn frame_id(&self) -> i8 {
         match self {
-            &MessageFrame::Tdispatch(_) => 2,
-            &MessageFrame::Rdispatch(_) => -2,
-            &MessageFrame::TInit(_) => 68,
-            &MessageFrame::RInit(_) => -68,
-            &MessageFrame::TDrain => 64,
-            &MessageFrame::RDrain => -64,
-            &MessageFrame::TPing => 65,
-            &MessageFrame::RPing => -65,
-            &MessageFrame::RErr(_) => -128,
+            &MessageFrame::Treq(_) => types::TREQ,
+            &MessageFrame::Rreq(_) => types::RREQ,
+            &MessageFrame::Tdispatch(_) => types::TDISPATCH,
+            &MessageFrame::Rdispatch(_) => types::RDISPATCH,
+            &MessageFrame::Tinit(_) => types::TINIT,
+            &MessageFrame::Rinit(_) => types::RINIT,
+            &MessageFrame::Tdrain => types::TDRAIN,
+            &MessageFrame::Rdrain => types::RDRAIN,
+            &MessageFrame::Tping => types::TPING,
+            &MessageFrame::Rping => types::RPING,
+            &MessageFrame::Tlease(_) => types::TLEASE,
+            &MessageFrame::Rerr(_) => types::RERR,
         }
     }
 }
@@ -231,7 +275,7 @@ fn context_size(contexts: &Contexts) -> usize {
 }
 
 #[inline]
-fn dtable_size(table: &DTable) -> usize {
+fn dtab_size(table: &Dtab) -> usize {
     let mut size = 2; // context size
 
     for &(ref k, ref v) in &table.entries {
@@ -247,32 +291,39 @@ impl Tdispatch {
     fn frame_size(&self) -> usize {
         let mut size = 2 + // dest size
                        context_size(&self.contexts) +
-                       dtable_size(&self.dtable);
+                       dtab_size(&self.dtab);
 
         size += self.dest.as_bytes().len();
-        size += self.body.remaining();
+        size += self.body.len();
         size
     }
 
-    pub fn basic(dest: String, body: SharedReadBuffer) -> MessageFrame {
-        MessageFrame::Tdispatch(
-            Tdispatch {
-                contexts: Vec::new(),
-                dest: dest,
-                dtable: DTable::new(),
-                body: body,
-            }
-        )
+    pub fn basic_(dest: String, body: Vec<u8>) -> Tdispatch {
+        Tdispatch {
+            contexts: Vec::new(),
+            dest: dest,
+            dtab: Dtab::new(),
+            body: body,
+        }
+    }
+
+    pub fn basic(dest: String, body: Vec<u8>) -> MessageFrame {
+        MessageFrame::Tdispatch(Tdispatch::basic_(dest, body))
     }
 }
 
 impl Rdispatch {
     fn frame_size(&self) -> usize {
-        1 + context_size(&self.contexts) + self.body.remaining()
+        1 + context_size(&self.contexts) + match &self.msg {
+            &Rmsg::Ok(ref body) => body.len(),
+            &Rmsg::Error(ref msg) => msg.as_bytes().len(),
+            &Rmsg::Nack(ref msg) => msg.as_bytes().len(),
+        }
     }
 }
 
-pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
+// write the message to the Write
+pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
     tryb!(buffer.write_i32::<BigEndian>(msg.frame.frame_size() as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
@@ -281,75 +332,95 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> Result<()> {
     encode_frame(buffer, &msg.frame)
 }
 
-fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> Result<()> {
+pub fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> io::Result<()> {
     match frame {
+        &MessageFrame::Treq(ref f) => frames::encode_treq(buffer, f),
+        &MessageFrame::Rreq(ref f) => frames::encode_rreq(buffer, f),
         &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
         &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
-        &MessageFrame::TInit(ref f) => frames::encode_init(buffer, f),
-        &MessageFrame::RInit(ref f) => frames::encode_init(buffer, f),
-        &MessageFrame::TPing => Ok(()),
-        &MessageFrame::RPing => Ok(()),
-        &MessageFrame::TDrain => Ok(()),
-        &MessageFrame::RDrain => Ok(()),
-        &MessageFrame::RErr(ref msg) => {
-            tryi!(buffer.write_all(msg.as_bytes()));
+        &MessageFrame::Tinit(ref f) => frames::encode_init(buffer, f),
+        &MessageFrame::Rinit(ref f) => frames::encode_init(buffer, f),
+        // the following are empty messages
+        &MessageFrame::Tping => Ok(()),
+        &MessageFrame::Rping => Ok(()),
+        &MessageFrame::Tdrain => Ok(()),
+        &MessageFrame::Rdrain => Ok(()),
+        &MessageFrame::Tlease(ref d) => {
+            let millis = d.as_secs()*1000 + (((d.subsec_nanos() as f64)/1e6) as u64);
+            tryb!(buffer.write_u8(0));
+            tryb!(buffer.write_u64::<BigEndian>(millis));
             Ok(())
+        }
+        &MessageFrame::Rerr(ref msg) => {
+            buffer.write_all(msg.as_bytes())
         }
     }
 }
 
-pub fn decode_frame(id: i8, buffer: SharedReadBuffer) -> Result<MessageFrame> {
-    Ok(match id {
-        2 => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(buffer))),
-        -2 => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(buffer))),
-        68 => MessageFrame::TInit(try!(frames::decode_init(buffer))),
-        -68 => MessageFrame::RInit(try!(frames::decode_init(buffer))),
-        64 => MessageFrame::TDrain,
-        -64 => MessageFrame::RDrain,
-        65 => MessageFrame::TPing,
-        -65 => MessageFrame::RPing,
-        -128 => MessageFrame::RErr(try!(frames::decode_rerr(buffer))),
+// Decodes `data` into a frame if type `tpe`
+pub fn decode_frame(tpe: i8, data: &[u8]) -> io::Result<MessageFrame> {
+    Ok(match tpe {
+        types::TREQ => MessageFrame::Treq(try!(frames::decode_treq(data))),
+        types::RREQ => MessageFrame::Rreq(try!(frames::decode_rreq(data))),
+        types::TDISPATCH => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(data))),
+        types::RDISPATCH => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(data))),
+        types::TINIT => MessageFrame::Tinit(try!(frames::decode_init(data))),
+        types::RINIT => MessageFrame::Rinit(try!(frames::decode_init(data))),
+        types::TDRAIN => MessageFrame::Tdrain,
+        types::RDRAIN => MessageFrame::Rdrain,
+        types::TPING => MessageFrame::Tping,
+        types::RPING => MessageFrame::Rping,
+        types::TLEASE => {
+            let mut buffer = Cursor::new(data);
+            let _ = try!(buffer.read_u8());
+            let ticks = try!(buffer.read_u64::<BigEndian>());
+            MessageFrame::Tlease(Duration::from_millis(ticks))
+        }
+        types::RERR => MessageFrame::Rerr(try!(frames::decode_rerr(data))),
         other => {
-            return Error::failed(io::ErrorKind::InvalidInput,
-                                 format!("Invalid frame id: {}", other));
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidInput,
+                    format!("Invalid frame type: {}", other))
+                );
         }
     })
 }
 
-// This is a synchronous function that will read a whole message from the `Read`
-pub fn read_message(input: &mut Read) -> Result<Message> {
+// Read an entire frame buffer
+pub fn read_frame(input: &mut Read) -> io::Result<MuxPacket> {
     let size = {
         let size = tryb!(input.read_i32::<BigEndian>());
-        if size < 0 {
-            return Error::failed(io::ErrorKind::InvalidData, "Invalid mux frame size");
+        if size < 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData, "Invalid mux frame size"
+            ));
         }
         size as usize
     };
 
-    let mut buf = vec![0;size];
-    tryi!(input.read_exact(&mut buf));
-    let buf = SharedReadBuffer::new(buf);
-    decode_message(buf)
+    let tpe = tryb!(input.read_i8());
+    let tag = try!(Tag::decode_tag(input));
+
+    let mut buf = vec![0;size-4];
+    try!(input.read_exact(&mut buf));
+    Ok(MuxPacket {
+        tpe: tpe,
+        tag: tag,
+        buffer: buf,
+    })
+}
+
+// This is a synchronous function that will read a whole message from the `Read`
+pub fn read_message(input: &mut Read) -> io::Result<Message> {
+    let packet = try!(read_frame(input));
+    decode_message(&packet)
 }
 
 // expects a SharedReadBuffer of the whole mux frame
-pub fn decode_message(mut input: SharedReadBuffer) -> Result<Message> {
-    let remaining = input.remaining();
-
-    if remaining < 4 {
-        return Error::failed(io::ErrorKind::InvalidData, "Invalid mux frame size");
-    }
-
-    let tpe = tryb!(input.read_i8());
-    let tag = try!(Tag::decode_tag(&mut input));
-
-    let msg_buff = input.consume_remaining();
-    debug_assert_eq!(msg_buff.remaining(), remaining - 4);
-
-    let frame = try!(decode_frame(tpe, msg_buff));
-
+pub fn decode_message(input: &MuxPacket) -> io::Result<Message> {
+    let frame = try!(decode_frame(input.tpe, &input.buffer));
     Ok(Message {
-        tag: tag,
+        tag: input.tag.clone(),
         frame: frame,
     })
 }
