@@ -1,5 +1,7 @@
 extern crate mux;
 
+use mux::session::*;
+
 extern crate byteorder;
 extern crate rand;
 
@@ -12,7 +14,6 @@ use std::thread;
 use std::time::Duration;
 
 fn test_session(socket: TcpStream) {
-    /*
 
     let session = Arc::new(MuxSession::new(socket).unwrap());
 
@@ -51,7 +52,6 @@ fn test_session(socket: TcpStream) {
     }
 
     println!("Finished. Average ping: {:?}", total_ping/threadc);
-    */
 }
 
 fn main() {
