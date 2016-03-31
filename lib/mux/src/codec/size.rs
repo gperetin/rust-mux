@@ -19,7 +19,7 @@ pub fn frame_size(frame: &MessageFrame) -> usize {
     }
 }
 
-fn tdispatch_size(msg: &Tdispatch) -> usize {
+pub fn tdispatch_size(msg: &Tdispatch) -> usize {
     let mut size = 2 + // dest size
                    context_size(&msg.contexts) +
                    dtab_size(&msg.dtab);
@@ -29,7 +29,7 @@ fn tdispatch_size(msg: &Tdispatch) -> usize {
     size
 }
 
-fn rdispatch_size(msg: &Rdispatch) -> usize {
+pub fn rdispatch_size(msg: &Rdispatch) -> usize {
     1 + context_size(&msg.contexts) + match &msg.msg {
         &Rmsg::Ok(ref body) => body.len(),
         &Rmsg::Error(ref msg) => msg.as_bytes().len(),
@@ -37,7 +37,7 @@ fn rdispatch_size(msg: &Rdispatch) -> usize {
     }
 }
 
-fn treq_size(treq: &Treq) -> usize {
+pub fn treq_size(treq: &Treq) -> usize {
     let mut size = 1; // header count
     for &(_, ref v) in &treq.headers {
         size += 2; // key and value lengths
@@ -48,7 +48,7 @@ fn treq_size(treq: &Treq) -> usize {
 }
 
 #[inline]
-fn rmsg_size(msg: &Rmsg) -> usize {
+pub fn rmsg_size(msg: &Rmsg) -> usize {
     match msg {
         &Rmsg::Ok(ref b) => b.len(),
         &Rmsg::Error(ref m) => m.as_bytes().len(),
@@ -68,7 +68,7 @@ pub fn init_size(init: &Init) -> usize {
 }
 
 #[inline]
-fn context_size(contexts: &Contexts) -> usize {
+pub fn context_size(contexts: &Contexts) -> usize {
     let mut size = 2; // context size
 
     for &(ref k, ref v) in contexts {
@@ -80,7 +80,7 @@ fn context_size(contexts: &Contexts) -> usize {
 }
 
 #[inline]
-fn dtab_size(table: &Dtab) -> usize {
+pub fn dtab_size(table: &Dtab) -> usize {
     let mut size = 2; // context size
 
     for &(ref k, ref v) in &table.entries {

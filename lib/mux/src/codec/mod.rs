@@ -10,9 +10,10 @@ use super::*;
 
 use std::{u8, u16};
 
-mod size;
+pub mod size;
 
 // extract a value from the byteorder::Result
+#[macro_export]
 macro_rules! tryb {
     ($e:expr) => (
         match $e {
