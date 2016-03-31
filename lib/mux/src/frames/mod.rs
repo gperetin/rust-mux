@@ -4,11 +4,134 @@ use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Write};
+use std::time::Duration;
 
 use super::*;
 
 use std::{u8, u16};
 
+mod size;
+
+// extract a value from the byteorder::Result
+macro_rules! tryb {
+    ($e:expr) => (
+        match $e {
+            Ok(r) => r,
+            Err(byteorder::Error::UnexpectedEOF) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "End of input"
+                ));
+            }
+            Err(byteorder::Error::Io(err)) => {
+                return Err(err);
+            }
+        }
+    )
+}
+
+// write the Message to the Write
+pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
+    // the size is the buffer size + the header (id + tag)
+    tryb!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
+    tryb!(buffer.write_i8(msg.frame.frame_id()));
+    try!(frames::encode_tag(buffer, &msg.tag));
+
+    encode_frame(buffer, &msg.frame)
+}
+
+pub fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> io::Result<()> {
+    match frame {
+        &MessageFrame::Treq(ref f) => frames::encode_treq(buffer, f),
+        &MessageFrame::Rreq(ref f) => frames::encode_rreq(buffer, f),
+        &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
+        &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
+        &MessageFrame::Tinit(ref f) => frames::encode_init(buffer, f),
+        &MessageFrame::Rinit(ref f) => frames::encode_init(buffer, f),
+        // the following are empty messages
+        &MessageFrame::Tping => Ok(()),
+        &MessageFrame::Rping => Ok(()),
+        &MessageFrame::Tdrain => Ok(()),
+        &MessageFrame::Rdrain => Ok(()),
+        &MessageFrame::Tlease(ref d) => {
+            let millis = d.as_secs()*1000 + (((d.subsec_nanos() as f64)/1e6) as u64);
+            tryb!(buffer.write_u8(0));
+            tryb!(buffer.write_u64::<BigEndian>(millis));
+            Ok(())
+        }
+        &MessageFrame::Rerr(ref msg) => {
+            buffer.write_all(msg.as_bytes())
+        }
+    }
+}
+
+// Decodes `data` into a frame if type `tpe`
+pub fn decode_frame(tpe: i8, data: &[u8]) -> io::Result<MessageFrame> {
+    Ok(match tpe {
+        types::TREQ => MessageFrame::Treq(try!(frames::decode_treq(data))),
+        types::RREQ => MessageFrame::Rreq(try!(frames::decode_rreq(data))),
+        types::TDISPATCH => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(data))),
+        types::RDISPATCH => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(data))),
+        types::TINIT => MessageFrame::Tinit(try!(frames::decode_init(data))),
+        types::RINIT => MessageFrame::Rinit(try!(frames::decode_init(data))),
+        types::TDRAIN => MessageFrame::Tdrain,
+        types::RDRAIN => MessageFrame::Rdrain,
+        types::TPING => MessageFrame::Tping,
+        types::RPING => MessageFrame::Rping,
+        types::TLEASE => {
+            let mut buffer = Cursor::new(data);
+            let _ = try!(buffer.read_u8());
+            let ticks = try!(buffer.read_u64::<BigEndian>());
+            MessageFrame::Tlease(Duration::from_millis(ticks))
+        }
+        types::RERR => MessageFrame::Rerr(try!(frames::decode_rerr(data))),
+        other => {
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidInput,
+                    format!("Invalid frame type: {}", other))
+                );
+        }
+    })
+}
+
+// Read an entire frame buffer
+pub fn read_frame(input: &mut Read) -> io::Result<MuxPacket> {
+    let size = {
+        let size = tryb!(input.read_i32::<BigEndian>());
+        if size < 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData, "Invalid mux frame size"
+            ));
+        }
+        size as usize
+    };
+
+    let tpe = tryb!(input.read_i8());
+    let tag = try!(frames::decode_tag(input));
+
+    let mut buf = vec![0;size-4];
+    try!(input.read_exact(&mut buf));
+    Ok(MuxPacket {
+        tpe: tpe,
+        tag: tag,
+        buffer: buf,
+    })
+}
+
+// This is a synchronous function that will read a whole message from the `Read`
+pub fn read_message(input: &mut Read) -> io::Result<Message> {
+    let packet = try!(read_frame(input));
+    decode_message(&packet)
+}
+
+// expects a SharedReadBuffer of the whole mux frame
+pub fn decode_message(input: &MuxPacket) -> io::Result<Message> {
+    let frame = try!(decode_frame(input.tpe, &input.buffer));
+    Ok(Message {
+        tag: input.tag.clone(),
+        frame: frame,
+    })
+}
 
 ///////////// Tag codec functions
 

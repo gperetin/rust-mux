@@ -53,16 +53,16 @@ fn roundtrip_frame(msg: MessageFrame) {
     };
 
     let mut w = new_write();
-    let _ = encode_message(&mut w, &msg).unwrap();
+    let _ = frames::encode_message(&mut w, &msg).unwrap();
     let w = w.into_inner();
-    let decoded = read_message(&mut io::Cursor::new(w)).unwrap();
+    let decoded = frames::read_message(&mut io::Cursor::new(w)).unwrap();
 
     assert_eq!(&msg, &decoded);
 }
 
 #[test]
 fn decode_tdispatch() {
-    let msg = read_message(&mut io::Cursor::new(TDISPATCH_BUF)).unwrap();
+    let msg = frames::read_message(&mut io::Cursor::new(TDISPATCH_BUF)).unwrap();
     let expected_tag = Tag::new(true, (4 << 16) | (7 << 8) | 9);
 
     assert_eq!(&expected_tag, &msg.tag);
@@ -87,7 +87,7 @@ fn encode_rdispatch() {
         ];
 
     let mut bytes = io::Cursor::new(Vec::new());
-    encode_message(&mut bytes, &msg).unwrap();
+    frames::encode_message(&mut bytes, &msg).unwrap();
     let bytes = bytes.into_inner();
 
     /* Test the encoding of the frame */ {
