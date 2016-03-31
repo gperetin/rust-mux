@@ -9,6 +9,36 @@ use super::*;
 
 use std::{u8, u16};
 
+const TAG_END_MASK: u32 = 1 << 23; // 24th bit of tag
+const TAG_ID_MASK: u32 = !TAG_END_MASK;
+
+pub fn decode_tag<R: Read + ?Sized>(buffer: &mut R) -> io::Result<Tag> {
+    let mut bts = [0; 3];
+    let _ = try!(buffer.read(&mut bts));
+
+    let id = (bts[0] as u32) << 16 |
+             (bts[1] as u32) <<  8 |
+             (bts[2] as u32);
+
+    Ok(Tag {
+        end: id & TAG_END_MASK == 0,
+        id: id & TAG_ID_MASK, // clear the last bit, its for the end flag
+    })
+}
+
+#[inline]
+pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> io::Result<()> {
+    let bytes = {
+        let id = tag.id;
+        let endbit = if tag.end { 0 } else { 1 };
+        [(id >> 16 & 0x7f) as u8 | (endbit << 7),
+         (id >> 8 & 0xff) as u8,
+         (id >> 0 & 0xff) as u8]
+    };
+
+    buffer.write_all(&bytes)
+}
+
 pub fn encode_headers(buffer: &mut Write, headers: &Headers) -> io::Result<()> {
     if headers.len() > u8::MAX as usize {
         return Err(io::Error::new(

@@ -102,7 +102,7 @@ fn encode_rdispatch() {
 
     /* Test decoding the tag of the frame */ {
         let mut read = io::Cursor::new(&bytes[5..]);
-        let tag = Tag::decode(&mut read).unwrap();
+        let tag = frames::decode_tag(&mut read).unwrap();
         assert_eq!(&msg.tag, &tag);
     }
 }
@@ -266,9 +266,9 @@ fn roundtrip_context() {
 fn roundtrip_tag() {
     fn roundtrip_frame(tag: &Tag) {
         let mut w = new_write();
-        let _ = Tag::encode(&mut w, &tag).unwrap();
+        let _ = frames::encode_tag(&mut w, &tag).unwrap();
         let mut w = io::Cursor::new(w.into_inner());
-        let decoded = Tag::decode(&mut w).unwrap();
+        let decoded = frames::decode_tag(&mut w).unwrap();
 
         assert_eq!(tag, &decoded);
     }

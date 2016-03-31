@@ -166,35 +166,7 @@ impl Tag {
         }
     }
 
-    pub fn decode(r: &mut Read) -> io::Result<Tag> {
-        let mut bts = [0; 3];
-        let _ = try!(r.read(&mut bts));
 
-        let id = (!(1 << 23)) &  // clear the last bit, its for the end flag
-                ((bts[0] as u32) << 16 |
-                 (bts[1] as u32) <<  8 |
-                 (bts[2] as u32));
-
-        Ok(Tag {
-            end: (1 << 7) & bts[0] == 0,
-            id: id,
-        })
-    }
-
-    #[inline]
-    pub fn to_bytes(&self) -> [u8;3] {
-        let endbit = if self.end { 0 } else { 1 };
-        [(self.id >> 16 & 0x7f) as u8 | (endbit << 7),
-            (self.id >> 8 & 0xff) as u8,
-            (self.id >> 0 & 0xff) as u8]
-    }
-
-    #[inline]
-    pub fn encode(buffer: &mut Write, tag: &Tag) -> io::Result<()> {
-        let bts = tag.to_bytes();
-        try!(buffer.write_all(&bts));
-        Ok(())
-    }
 }
 
 impl Init {
@@ -327,7 +299,7 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
     tryb!(buffer.write_i32::<BigEndian>(msg.frame.frame_size() as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
-    try!(Tag::encode(buffer, &msg.tag));
+    try!(frames::encode_tag(buffer, &msg.tag));
 
     encode_frame(buffer, &msg.frame)
 }
@@ -399,7 +371,7 @@ pub fn read_frame(input: &mut Read) -> io::Result<MuxPacket> {
     };
 
     let tpe = tryb!(input.read_i8());
-    let tag = try!(Tag::decode(input));
+    let tag = try!(frames::decode_tag(input));
 
     let mut buf = vec![0;size-4];
     try!(input.read_exact(&mut buf));
