@@ -2,6 +2,46 @@ use super::*;
 
 use std::io;
 
+
+static TDISPATCH_BUF: &'static [u8] = &[
+    0, 0, 0, 65, // frame size
+
+    2, // TDISPATCH
+    4, 7, 9, // tag
+
+    // contexts:
+    0, 2, // 2 contexts
+
+    // context 0 key
+    0, 4, // length
+    1, 2, 3, 4,
+
+    // context 0 val
+    0, 2, // length
+    6, 7,
+
+    // context 1 key
+    0, 2, // length
+    3, 4,
+
+    // context 1 val
+    0, 3, // length
+    6, 7, 8,
+
+    // dst
+    0, 4, // length
+    '/' as u8, 66, 65, 68, // "/BAD"
+
+    // dtab: /BAD => /DAD
+    0, 1, // length
+    0, 4, // source length
+    '/' as u8, 66, 65, 68, // "/BAD"
+    0, 4, // tree length
+    '/' as u8, 68, 65, 68, // "/DAD"
+
+    // data: [0 .. 20)
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+
 fn new_write() -> io::Cursor<Vec<u8>> {
     io::Cursor::new(Vec::new())
 }
@@ -18,6 +58,53 @@ fn roundtrip_frame(msg: MessageFrame) {
     let decoded = read_message(&mut io::Cursor::new(w)).unwrap();
 
     assert_eq!(&msg, &decoded);
+}
+
+#[test]
+fn decode_tdispatch() {
+    let msg = read_message(&mut io::Cursor::new(TDISPATCH_BUF)).unwrap();
+    let expected_tag = Tag::new(true, (4 << 16) | (7 << 8) | 9);
+
+    assert_eq!(&expected_tag, &msg.tag);
+}
+
+#[test]
+fn encode_rdispatch() {
+    let msg_frame = MessageFrame::Rdispatch(Rdispatch {
+        contexts: Vec::new(),
+        msg: Rmsg::Ok(b"nope".to_vec()),
+    });
+    let tag = Tag::new(true, (1 << 16) | (2 << 8) | 3);
+    let msg = Message { tag: tag, frame: msg_frame };
+
+    let expected = vec![
+        0x00, 0x00, 0x00, 0x0b, // frame
+        0xfe, // msg type: rdispatch (-2)
+        0x01, 0x02, 0x03, // tag
+        0x00, // status
+        0x00, 0x00, // contexts
+        0x6e, 0x6f, 0x70, 0x65 // "nope""
+        ];
+
+    let mut bytes = io::Cursor::new(Vec::new());
+    encode_message(&mut bytes, &msg).unwrap();
+    let bytes = bytes.into_inner();
+
+    /* Test the encoding of the frame */ {
+        assert_eq!(&bytes, &expected);
+    }
+
+    /* Test decoding the context of the frame */ {
+        let mut read = io::Cursor::new(&bytes[8..]);
+        let ctxs = frames::decode_contexts(&mut read).unwrap();
+        assert_eq!(ctxs, vec![]);
+    }
+
+    /* Test decoding the tag of the frame */ {
+        let mut read = io::Cursor::new(&bytes[5..]);
+        let tag = Tag::decode(&mut read).unwrap();
+        assert_eq!(&msg.tag, &tag);
+    }
 }
 
 #[test]
@@ -179,9 +266,9 @@ fn roundtrip_context() {
 fn roundtrip_tag() {
     fn roundtrip_frame(tag: &Tag) {
         let mut w = new_write();
-        let _ = Tag::encode_tag(&mut w, &tag).unwrap();
+        let _ = Tag::encode(&mut w, &tag).unwrap();
         let mut w = io::Cursor::new(w.into_inner());
-        let decoded = Tag::decode_tag(&mut w).unwrap();
+        let decoded = Tag::decode(&mut w).unwrap();
 
         assert_eq!(tag, &decoded);
     }
