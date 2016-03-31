@@ -9,6 +9,9 @@ use super::*;
 
 use std::{u8, u16};
 
+
+///////////// Tag codec functions
+
 const TAG_END_MASK: u32 = 1 << 23; // 24th bit of tag
 const TAG_ID_MASK: u32 = !TAG_END_MASK;
 
@@ -38,6 +41,8 @@ pub fn encode_tag(buffer: &mut Write, tag: &Tag) -> io::Result<()> {
 
     buffer.write_all(&bytes)
 }
+
+///////////// headers codec functions
 
 pub fn encode_headers(buffer: &mut Write, headers: &Headers) -> io::Result<()> {
     if headers.len() > u8::MAX as usize {
@@ -74,6 +79,8 @@ pub fn decode_headers<R: Read + ?Sized>(buffer: &mut R) -> io::Result<Headers> {
 
     Ok(acc)
 }
+
+///////////// Contexts codec functions
 
 pub fn encode_contexts(buffer: &mut Write, contexts: &Contexts) -> io::Result<()> {
     if contexts.len() > u16::MAX as usize {
@@ -117,6 +124,8 @@ pub fn decode_contexts<R: Read + ?Sized>(buffer: &mut R) -> io::Result<Contexts>
     Ok(acc)
 }
 
+///////////// Dtab codec functions
+
 pub fn decode_dtab<R: Read + ?Sized>(buffer: &mut R) -> io::Result<Dtab> {
     let ctxs: Vec<(Vec<u8>, Vec<u8>)> = try!(decode_contexts(buffer));
     let mut acc = Vec::with_capacity(ctxs.len());
@@ -134,43 +143,22 @@ pub fn encode_dtab<R: Write + ?Sized>(buffer: &mut R, table: &Dtab) -> io::Resul
     tryb!(buffer.write_u16::<BigEndian>(table.entries.len() as u16));
 
     for &(ref k, ref v) in &table.entries {
-        try!(encode_string(buffer, k));
-        try!(encode_string(buffer, v));
+        try!(encode_u16_string(buffer, k));
+        try!(encode_u16_string(buffer, v));
     }
     Ok(())
 }
 
-fn to_string(vec: Vec<u8>) -> io::Result<String> {
-    match String::from_utf8(vec) {
-        Ok(s) => Ok(s),
-        Err(_) => Err(io::Error::new(ErrorKind::InvalidData, "Invalid UTF8 field")),
-    }
-}
-
-// decode a utf8 string with length specified by a u16 prefix byte
-#[inline]
-pub fn decode_string<R: Read + ?Sized>(buffer: &mut R) -> io::Result<String> {
-    let str_len = tryb!(buffer.read_u16::<BigEndian>());
-    let mut s = vec![0; str_len as usize];
-
-    try!(buffer.read_exact(&mut s));
-
-    to_string(s)
-}
+///////////// Rerr codec functions
 
 #[inline]
-pub fn encode_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> io::Result<()> {
-    let bytes = s.as_bytes();
-    assert!(bytes.len() <= u16::MAX as usize);
-    tryb!(buffer.write_u16::<BigEndian>(bytes.len() as u16));
-    buffer.write_all(bytes)
-}
-
 pub fn decode_rerr<R: Read>(mut buffer: R) -> io::Result<String> {
     let mut data = Vec::new();
     let _ = try!(buffer.read_to_end(&mut data));
     to_string(data)
 }
+
+///////////// Init codec functions
 
 pub fn encode_init(buffer: &mut Write, msg: &Init) -> io::Result<()> {
     tryb!(buffer.write_u16::<BigEndian>(msg.version));
@@ -210,6 +198,8 @@ pub fn decode_init(data: &[u8]) -> io::Result<Init> {
     })
 }
 
+///////////// Rdispatch codec functions
+
 pub fn encode_rdispatch(buffer: &mut Write, frame: &Rdispatch) -> io::Result<()> {
     let (status, body) = rmsg_status_body(&frame.msg);
 
@@ -231,6 +221,8 @@ pub fn decode_rdispatch<R: Read>(mut buffer: R) -> io::Result<Rdispatch> {
     })
 }
 
+///////////// Rreq codec functions
+
 pub fn encode_rreq(buffer: &mut Write, frame: &Rmsg) -> io::Result<()> {
     let (status, body) = rmsg_status_body(frame);
     tryb!(buffer.write_u8(status));
@@ -244,12 +236,11 @@ pub fn decode_rreq<R: Read>(mut buffer: R) -> io::Result<Rmsg> {
     decode_rmsg_body(status, body)
 }
 
+///////////// Tdispatch codec functions
 
-
-// Expects to consume the whole stream
 pub fn decode_tdispatch<R: Read>(mut buffer: R) -> io::Result<Tdispatch> {
     let contexts = try!(decode_contexts(&mut buffer));
-    let dest = try!(decode_string(&mut buffer));
+    let dest = try!(decode_u16_string(&mut buffer));
     let dtab = try!(decode_dtab(&mut buffer));
 
     let mut body = Vec::new();
@@ -265,10 +256,12 @@ pub fn decode_tdispatch<R: Read>(mut buffer: R) -> io::Result<Tdispatch> {
 
 pub fn encode_tdispatch(buffer: &mut Write, msg: &Tdispatch) -> io::Result<()> {
     try!(encode_contexts(buffer, &msg.contexts));
-    try!(encode_string(buffer, &msg.dest));
+    try!(encode_u16_string(buffer, &msg.dest));
     try!(encode_dtab(buffer, &msg.dtab));
     buffer.write_all(&msg.body)
 }
+
+///////////// Treq codec functions
 
 pub fn decode_treq<R: Read>(mut buffer: R) -> io::Result<Treq> {
     let headers = try!(decode_headers(&mut buffer));
@@ -305,5 +298,34 @@ fn decode_rmsg_body(status: u8, body: Vec<u8>) -> io::Result<Rmsg> {
         other => Err(
             io::Error::new(ErrorKind::InvalidData, format!("Invalid status code: {}", other))
         )
+    }
+}
+
+// tools for operating on Strings
+
+// decode a utf8 string with length specified by a u16 prefix byte
+#[inline]
+pub fn decode_u16_string<R: Read + ?Sized>(buffer: &mut R) -> io::Result<String> {
+    let str_len = tryb!(buffer.read_u16::<BigEndian>());
+    let mut s = vec![0; str_len as usize];
+
+    try!(buffer.read_exact(&mut s));
+
+    to_string(s)
+}
+
+#[inline]
+pub fn encode_u16_string<W: Write + ?Sized>(buffer: &mut W, s: &str) -> io::Result<()> {
+    let bytes = s.as_bytes();
+    assert!(bytes.len() <= u16::MAX as usize);
+    tryb!(buffer.write_u16::<BigEndian>(bytes.len() as u16));
+    buffer.write_all(bytes)
+}
+
+#[inline]
+fn to_string(vec: Vec<u8>) -> io::Result<String> {
+    match String::from_utf8(vec) {
+        Ok(s) => Ok(s),
+        Err(_) => Err(io::Error::new(ErrorKind::InvalidData, "Invalid UTF8 field")),
     }
 }

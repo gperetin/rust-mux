@@ -160,13 +160,8 @@ impl Message {
 impl Tag {
     #[inline]
     pub fn new(end: bool, id: u32) -> Tag {
-        Tag {
-            end: end,
-            id: id,
-        }
+        Tag { end: end, id: id, }
     }
-
-
 }
 
 impl Init {
