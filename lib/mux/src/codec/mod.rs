@@ -35,19 +35,19 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
     tryb!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
     tryb!(buffer.write_i8(msg.frame.frame_id()));
-    try!(frames::encode_tag(buffer, &msg.tag));
+    try!(encode_tag(buffer, &msg.tag));
 
     encode_frame(buffer, &msg.frame)
 }
 
 pub fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> io::Result<()> {
     match frame {
-        &MessageFrame::Treq(ref f) => frames::encode_treq(buffer, f),
-        &MessageFrame::Rreq(ref f) => frames::encode_rreq(buffer, f),
-        &MessageFrame::Tdispatch(ref f) => frames::encode_tdispatch(buffer, f),
-        &MessageFrame::Rdispatch(ref f) => frames::encode_rdispatch(buffer, f),
-        &MessageFrame::Tinit(ref f) => frames::encode_init(buffer, f),
-        &MessageFrame::Rinit(ref f) => frames::encode_init(buffer, f),
+        &MessageFrame::Treq(ref f) => encode_treq(buffer, f),
+        &MessageFrame::Rreq(ref f) => encode_rreq(buffer, f),
+        &MessageFrame::Tdispatch(ref f) => encode_tdispatch(buffer, f),
+        &MessageFrame::Rdispatch(ref f) => encode_rdispatch(buffer, f),
+        &MessageFrame::Tinit(ref f) => encode_init(buffer, f),
+        &MessageFrame::Rinit(ref f) => encode_init(buffer, f),
         // the following are empty messages
         &MessageFrame::Tping => Ok(()),
         &MessageFrame::Rping => Ok(()),
@@ -68,12 +68,12 @@ pub fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> io::Result<()> 
 // Decodes `data` into a frame if type `tpe`
 pub fn decode_frame(tpe: i8, data: &[u8]) -> io::Result<MessageFrame> {
     Ok(match tpe {
-        types::TREQ => MessageFrame::Treq(try!(frames::decode_treq(data))),
-        types::RREQ => MessageFrame::Rreq(try!(frames::decode_rreq(data))),
-        types::TDISPATCH => MessageFrame::Tdispatch(try!(frames::decode_tdispatch(data))),
-        types::RDISPATCH => MessageFrame::Rdispatch(try!(frames::decode_rdispatch(data))),
-        types::TINIT => MessageFrame::Tinit(try!(frames::decode_init(data))),
-        types::RINIT => MessageFrame::Rinit(try!(frames::decode_init(data))),
+        types::TREQ => MessageFrame::Treq(try!(decode_treq(data))),
+        types::RREQ => MessageFrame::Rreq(try!(decode_rreq(data))),
+        types::TDISPATCH => MessageFrame::Tdispatch(try!(decode_tdispatch(data))),
+        types::RDISPATCH => MessageFrame::Rdispatch(try!(decode_rdispatch(data))),
+        types::TINIT => MessageFrame::Tinit(try!(decode_init(data))),
+        types::RINIT => MessageFrame::Rinit(try!(decode_init(data))),
         types::TDRAIN => MessageFrame::Tdrain,
         types::RDRAIN => MessageFrame::Rdrain,
         types::TPING => MessageFrame::Tping,
@@ -84,7 +84,7 @@ pub fn decode_frame(tpe: i8, data: &[u8]) -> io::Result<MessageFrame> {
             let ticks = try!(buffer.read_u64::<BigEndian>());
             MessageFrame::Tlease(Duration::from_millis(ticks))
         }
-        types::RERR => MessageFrame::Rerr(try!(frames::decode_rerr(data))),
+        types::RERR => MessageFrame::Rerr(try!(decode_rerr(data))),
         other => {
             return Err(
                 io::Error::new(io::ErrorKind::InvalidInput,
@@ -107,7 +107,7 @@ pub fn read_frame(input: &mut Read) -> io::Result<MuxPacket> {
     };
 
     let tpe = tryb!(input.read_i8());
-    let tag = try!(frames::decode_tag(input));
+    let tag = try!(decode_tag(input));
 
     let mut buf = vec![0;size-4];
     try!(input.read_exact(&mut buf));

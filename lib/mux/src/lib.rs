@@ -3,7 +3,7 @@ extern crate byteorder;
 use std::time::Duration;
 
 pub mod types;
-pub mod frames;
+pub mod codec;
 
 pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
