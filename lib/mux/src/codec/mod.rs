@@ -31,6 +31,31 @@ macro_rules! tryb {
     )
 }
 
+// Synchronously read an entire frame
+pub fn read_message(input: &mut Read) -> io::Result<Message> {
+    let size = {
+        let size = tryb!(input.read_i32::<BigEndian>());
+        if size < 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData, "Invalid mux frame size"
+            ));
+        }
+        size as usize
+    };
+
+    let tpe = tryb!(input.read_i8());
+    let tag = try!(decode_tag(input));
+
+    let mut buf = vec![0;size-4];
+    try!(input.read_exact(&mut buf));
+    let frame = try!(decode_frame(tpe, &buf));
+
+    Ok(Message {
+        tag: tag,
+        frame: frame,
+    })
+}
+
 // write the Message to the Write
 pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
@@ -40,6 +65,8 @@ pub fn encode_message(buffer: &mut Write, msg: &Message) -> io::Result<()> {
 
     encode_frame(buffer, &msg.frame)
 }
+
+// frame codec functions
 
 pub fn encode_frame(buffer: &mut Write, frame: &MessageFrame) -> io::Result<()> {
     match frame {
@@ -95,44 +122,6 @@ pub fn decode_frame(tpe: i8, data: &[u8]) -> io::Result<MessageFrame> {
     })
 }
 
-// Read an entire frame buffer
-pub fn read_frame(input: &mut Read) -> io::Result<MuxPacket> {
-    let size = {
-        let size = tryb!(input.read_i32::<BigEndian>());
-        if size < 4 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData, "Invalid mux frame size"
-            ));
-        }
-        size as usize
-    };
-
-    let tpe = tryb!(input.read_i8());
-    let tag = try!(decode_tag(input));
-
-    let mut buf = vec![0;size-4];
-    try!(input.read_exact(&mut buf));
-    Ok(MuxPacket {
-        tpe: tpe,
-        tag: tag,
-        buffer: buf,
-    })
-}
-
-// This is a synchronous function that will read a whole message from the `Read`
-pub fn read_message(input: &mut Read) -> io::Result<Message> {
-    let packet = try!(read_frame(input));
-    decode_message(&packet)
-}
-
-// expects a SharedReadBuffer of the whole mux frame
-pub fn decode_message(input: &MuxPacket) -> io::Result<Message> {
-    let frame = try!(decode_frame(input.tpe, &input.buffer));
-    Ok(Message {
-        tag: input.tag.clone(),
-        frame: frame,
-    })
-}
 
 ///////////// Tag codec functions
 

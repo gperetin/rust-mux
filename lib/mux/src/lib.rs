@@ -8,13 +8,6 @@ pub mod codec;
 pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct MuxPacket {
-    pub tpe: i8,
-    pub tag: Tag,
-    pub buffer: Vec<u8>,
-}
-
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Tag {
     pub end: bool,
