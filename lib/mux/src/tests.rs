@@ -55,8 +55,20 @@ fn roundtrip_frame(msg: MessageFrame) {
     let mut w = new_write();
     let _ = codec::encode_message(&mut w, &msg).unwrap();
     let w = w.into_inner();
-    let decoded = codec::read_message(&mut io::Cursor::new(w)).unwrap();
 
+    let mut two = Vec::new();
+
+    two.extend_from_slice(&w);
+    two.extend_from_slice(&w);
+
+    let mut buffer = io::Cursor::new(two);
+
+    // decode once
+    let decoded = codec::read_message(&mut buffer).unwrap();
+    assert_eq!(&msg, &decoded);
+
+    // decode it again to make sure we didn't consume too much data the first time
+    let decoded = codec::read_message(&mut buffer).unwrap();
     assert_eq!(&msg, &decoded);
 }
 
