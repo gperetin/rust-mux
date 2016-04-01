@@ -3,7 +3,7 @@ extern crate time;
 use super::super::*;
 
 use byteorder;
-use byteorder::{WriteBytesExt, ReadBytesExt, BigEndian, ByteOrder};
+use byteorder::{WriteBytesExt, BigEndian, ByteOrder};
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -24,12 +24,6 @@ enum Either<L,R> {
     Right(R),
 }
 
-struct MuxPacket {
-    tpe: i8,
-    tag: Tag,
-    buffer: Vec<u8>,
-}
-
 // need to detail how the state can be 'poisoned' by a protocol error
 struct SessionReadState {
     channel_states: BTreeMap<u32, ReadState>,
@@ -38,7 +32,7 @@ struct SessionReadState {
 }
 
 enum ReadState {
-    Packet(Option<MuxPacket>), // a queue for later version of the protocol
+    Packet(Option<Message>), // a queue for later version of the protocol
     Waiting(*const Condvar),
     Poisoned(io::Error),
 }
@@ -120,7 +114,7 @@ impl SessionReadState {
 
     fn abort_session(&mut self, reason: ErrorKind, msg: &str) {
         self.state = SessionState::Error(reason, msg.to_owned());
-        // We have a malformed packet or connection error. Alert the channels.
+        // We have a malformed message or connection error. Alert the channels.
         for (_,v) in self.channel_states.iter_mut() {
             let mut next = ReadState::Poisoned(io::Error::new(reason.clone(), msg));
             mem::swap(&mut next, v);
@@ -150,20 +144,18 @@ impl MuxSessionImpl {
             self.dispatch_write(id, write, msg)
         }));
 
-        let packet = try!(self.dispatch_read(id));
-        // only addresses packets intended for this channel
-        match codec::decode_frame(packet.tpe, &packet.buffer[4..]) {
-            Ok(MessageFrame::Rdispatch(d)) => Ok(d),
-            Ok(MessageFrame::Rerr(reason)) => Err(io::Error::new(ErrorKind::Other, reason)),
+        let msg = try!(self.dispatch_read(id));
+        // only addresses messages intended for this channel
+        match msg.frame {
+            MessageFrame::Rdispatch(d) => Ok(d),
+            MessageFrame::Rerr(reason) => Err(io::Error::new(ErrorKind::Other, reason)),
 
             // the rest of these are unexpected messages at this point
-            Ok(other) => {
+            other => {
                 // Tdispatch, Pings, Drains, and Inits
                 let msg = format!("Unexpected frame: {:?}", &other);
                 self.abort_session_proto(&msg)
             }
-
-            Err(err) => self.abort_session(err.kind(), err.description()),
         }
     }
 
@@ -180,8 +172,7 @@ impl MuxSessionImpl {
             codec::encode_message(&mut *write, &ping)
         }));
 
-        let packet = try!(self.dispatch_read(id));
-        let msg = try!(codec::decode_message(packet.buffer.as_slice()));
+        let msg = try!(self.dispatch_read(id));
         match msg.frame {
             MessageFrame::Rping => {
                 let elapsed = time::precise_time_ns() - start;
@@ -228,7 +219,7 @@ impl MuxSessionImpl {
 
     // dispatch_read will clean up the channel state after receiving its message.
     // I don't like that pattern: the channel state should be handled at one point.
-    fn dispatch_read(&self, id: u32) -> io::Result<MuxPacket> {
+    fn dispatch_read(&self, id: u32) -> io::Result<Message> {
         match self.dispatch_read_slave(id) {
             Either::Right(result) => result,
             Either::Left(read) => self.dispatch_read_master(id, read),
@@ -236,7 +227,7 @@ impl MuxSessionImpl {
     }
 
     // Wait for a result or for the Read to become available
-    fn dispatch_read_slave(&self, id: u32) -> Either<Box<Read>, io::Result<MuxPacket>> {
+    fn dispatch_read_slave(&self, id: u32) -> Either<Box<Read>, io::Result<Message>> {
         let cv = Condvar::new(); // would be sweet if we could use a static...
         let mut read_state = self.read_state.lock().unwrap();
 
@@ -245,10 +236,10 @@ impl MuxSessionImpl {
 
             // TODO: this is functionality that should be in the SessionReadState
             let result = match read_state.channel_states.get_mut(&id).unwrap() {
-                &mut ReadState::Packet(ref mut packet) if packet.is_some() => {
+                &mut ReadState::Packet(ref mut msg) if msg.is_some() => {
                     // we have data
                     let mut data = None;
-                    mem::swap(packet, &mut data);
+                    mem::swap(msg, &mut data);
                     Some(Ok(data.unwrap()))
                 }
                 &mut ReadState::Poisoned(ref err) => {
@@ -256,7 +247,7 @@ impl MuxSessionImpl {
                 }
                     // either this is the first go, we were elected leader,
                     // or a spurious wakeup occured. If we become leader set
-                    // our state to an empty packet.
+                    // our state to an empty message.
                 st => {
                     *st = if read_available { ReadState::Packet(None) }
                           else { ReadState::Waiting(&cv) };
@@ -285,28 +276,28 @@ impl MuxSessionImpl {
 
     // Become the read master, reading data and notifying waiting channel_states.
     // It is our job to clean up on error and elect a new leader once we have found
-    // the packet we are interested in. We must also take care to return the Read
+    // the message we are interested in. We must also take care to return the Read
     // or else we will kill the session.
-    fn dispatch_read_master(&self, id: u32, mut read: Box<Read>) -> io::Result<MuxPacket> {
+    fn dispatch_read_master(&self, id: u32, mut read: Box<Read>) -> io::Result<Message> {
         loop {
             // read some data
-            let packet = read_frame(&mut *read);
+            let msg = codec::read_message(&mut *read);
             let mut read_state = self.read_state.lock().unwrap();
 
-            let result = match packet {
+            let result = match msg {
                 Err(err) => {
                     read_state.abort_session(err.kind(), err.description());
                     Err(err)
                 }
-                Ok(packet) => {
-                     if packet.tag.id == id {
-                        // our packet. Need to elect a new leader and return
+                Ok(msg) => {
+                     if msg.tag.id == id {
+                        // our message. Need to elect a new leader and return
                         read_state.elect_leader();
-                        Ok(packet)
+                        Ok(msg)
                     } else {
                         // if a channel exists, let them handle it
-                        if let Some(st) = read_state.channel_states.get_mut(&packet.tag.id) {
-                            let mut old = ReadState::Packet(Some(packet));
+                        if let Some(st) = read_state.channel_states.get_mut(&msg.tag.id) {
+                            let mut old = ReadState::Packet(Some(msg));
                             mem::swap(&mut old, st);
 
                             if let ReadState::Waiting(cv) = old {
@@ -316,15 +307,15 @@ impl MuxSessionImpl {
                         }
                         // Note: this would better as an `else` but the borrow checker
                         //       gets upset about borrowing read_state again.
-                        // If we get here, the packet is unhandled by any channel.
-                        let id = packet.tag.id;
-                        match codec::decode_frame(packet.tpe, &packet.buffer[4..]) {
-                            Ok(MessageFrame::Tlease(_)) if id == 0 => {
+                        // If we get here, the message is unhandled by any channel.
+                        let id = msg.tag.id;
+                        match msg.frame {
+                            MessageFrame::Tlease(_) if id == 0 => {
                                 println!("Unhandled Tlease frame.");
                                 continue;
                             }
 
-                            Ok(MessageFrame::Tping) => {
+                            MessageFrame::Tping => {
                                 match self.ping_reply(id) {
                                     Ok(_) => continue,
                                     Err(err) => {
@@ -334,22 +325,16 @@ impl MuxSessionImpl {
                                 }
                             }
 
-                            Ok(MessageFrame::Tdrain) => {
+                            MessageFrame::Tdrain => {
                                 read_state.drain();
                                 continue;
                             }
 
-                            // All other packets are unexpected
-                            Ok(frame) => {
+                            // All other messages are unexpected
+                            frame => {
                                 let msg = format!("Unexpected frame: {:?}", &frame);
                                 read_state.abort_session(ErrorKind::InvalidData, &msg);
                                 Err(io::Error::new(ErrorKind::InvalidData, msg))
-                            }
-
-                            // Packet decode failure
-                            Err(err) => {
-                                read_state.abort_session(err.kind(), err.description());
-                                Err(err)
                             }
                         }
                     }
@@ -395,20 +380,6 @@ impl MuxSessionImpl {
 
 fn copy_error(err: &io::Error) -> io::Error {
     io::Error::new(err.kind(), err.description())
-}
-
-fn read_frame<R: Read + ?Sized>(reader: &mut R) -> io::Result<MuxPacket> {
-    let size = tryb!(reader.read_u32::<BigEndian>());
-    let mut buffer = vec![0; size as usize];
-    try!(reader.read_exact(&mut buffer));
-
-    let tpe = buffer[0] as i8;
-    let tag = try!(codec::decode_tag(&mut io::Cursor::new(&buffer[1..4])));
-    Ok(MuxPacket {
-        tpe: tpe,
-        tag: tag,
-        buffer: buffer,
-    })
 }
 
 #[cfg(test)]
