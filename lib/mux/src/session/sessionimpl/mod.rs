@@ -3,7 +3,7 @@ extern crate time;
 use super::super::*;
 
 use byteorder;
-use byteorder::{WriteBytesExt, BigEndian, ByteOrder};
+use byteorder::{WriteBytesExt, ReadBytesExt, BigEndian, ByteOrder};
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -22,6 +22,12 @@ const MAX_TAG: usize = (1 << 23) - 1;
 enum Either<L,R> {
     Left(L),
     Right(R),
+}
+
+struct MuxPacket {
+    tpe: i8,
+    tag: Tag,
+    buffer: Vec<u8>,
 }
 
 // need to detail how the state can be 'poisoned' by a protocol error
@@ -146,7 +152,7 @@ impl MuxSessionImpl {
 
         let packet = try!(self.dispatch_read(id));
         // only addresses packets intended for this channel
-        match codec::decode_frame(packet.tpe, &packet.buffer) {
+        match codec::decode_frame(packet.tpe, &packet.buffer[4..]) {
             Ok(MessageFrame::Rdispatch(d)) => Ok(d),
             Ok(MessageFrame::Rerr(reason)) => Err(io::Error::new(ErrorKind::Other, reason)),
 
@@ -175,7 +181,7 @@ impl MuxSessionImpl {
         }));
 
         let packet = try!(self.dispatch_read(id));
-        let msg = try!(codec::decode_message(&packet));
+        let msg = try!(codec::decode_message(packet.buffer.as_slice()));
         match msg.frame {
             MessageFrame::Rping => {
                 let elapsed = time::precise_time_ns() - start;
@@ -284,7 +290,7 @@ impl MuxSessionImpl {
     fn dispatch_read_master(&self, id: u32, mut read: Box<Read>) -> io::Result<MuxPacket> {
         loop {
             // read some data
-            let packet = codec::read_frame(&mut *read);
+            let packet = read_frame(&mut *read);
             let mut read_state = self.read_state.lock().unwrap();
 
             let result = match packet {
@@ -312,7 +318,7 @@ impl MuxSessionImpl {
                         //       gets upset about borrowing read_state again.
                         // If we get here, the packet is unhandled by any channel.
                         let id = packet.tag.id;
-                        match codec::decode_frame(packet.tpe, &packet.buffer) {
+                        match codec::decode_frame(packet.tpe, &packet.buffer[4..]) {
                             Ok(MessageFrame::Tlease(_)) if id == 0 => {
                                 println!("Unhandled Tlease frame.");
                                 continue;
@@ -389,6 +395,20 @@ impl MuxSessionImpl {
 
 fn copy_error(err: &io::Error) -> io::Error {
     io::Error::new(err.kind(), err.description())
+}
+
+fn read_frame<R: Read + ?Sized>(reader: &mut R) -> io::Result<MuxPacket> {
+    let size = tryb!(reader.read_u32::<BigEndian>());
+    let mut buffer = vec![0; size as usize];
+    try!(reader.read_exact(&mut buffer));
+
+    let tpe = buffer[0] as i8;
+    let tag = try!(codec::decode_tag(&mut io::Cursor::new(&buffer[1..4])));
+    Ok(MuxPacket {
+        tpe: tpe,
+        tag: tag,
+        buffer: buffer,
+    })
 }
 
 #[cfg(test)]
