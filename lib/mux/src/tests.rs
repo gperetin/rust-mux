@@ -53,7 +53,7 @@ fn roundtrip_frame(msg: MessageFrame) {
     };
 
     let mut w = new_write();
-    let _ = codec::encode_message(&mut w, &msg).unwrap();
+    let _ = codec::write_message(&mut w, &msg).unwrap();
     let w = w.into_inner();
 
     let mut two = Vec::new();
@@ -99,7 +99,7 @@ fn encode_rdispatch() {
         ];
 
     let mut bytes = io::Cursor::new(Vec::new());
-    codec::encode_message(&mut bytes, &msg).unwrap();
+    codec::write_message(&mut bytes, &msg).unwrap();
     let bytes = bytes.into_inner();
 
     /* Test the encoding of the frame */ {

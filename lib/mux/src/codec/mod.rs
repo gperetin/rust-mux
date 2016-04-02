@@ -12,6 +12,7 @@ use std::{u8, u16};
 
 pub mod size;
 
+// concise length checking for encoding length delimited fields
 macro_rules! chklen {
     ($e:expr, $len:expr) => ({
         chklen!($e, $len, "Length overflow.")
@@ -23,7 +24,20 @@ macro_rules! chklen {
     };
 }
 
-// Synchronously read an entire frame
+/// Synchronously read a whole mux `Message`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has received an entire mux `Message`
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+///
+/// let mut r = Cursor::new(vec![0,0,0,4,65,0,0,0,1,0,0,0,0]); // ping frame plus 4 0's
+/// let frame = codec::read_message(&mut r).unwrap().frame;
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
     let size = {
         let size = try!(input.read_i32::<BigEndian>());
@@ -38,7 +52,21 @@ pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
     decode_message(input.take(size))
 }
 
-// Synchronously read an entire frame consuming the entire Read
+/// Synchronously decode a mux `Message`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has decoded a message. Message length is assumed to be triggered by an EOF.
+/// When using use a continuous stream, such as a `TcpStream`, use `read_message`.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+///
+/// let mut r = Cursor::new(vec![65,0,0,0,1]); // ping frame
+/// let frame = codec::decode_message(&mut r).unwrap().frame;
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
     let tpe = try!(read.read_i8());
     let tag = try!(decode_tag(&mut read));
@@ -50,18 +78,65 @@ pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
     })
 }
 
-// write the Message to the Write
-pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
+/// Synchronously encode a `Message` to the `Write` with the frame size
+///
+/// Convert the `Message` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::write_message(&mut w, &Message { tag: tag, frame: MessageFrame::Tping });
+/// assert_eq!(w.into_inner(), vec![0,0,0,4,65,0,0,1]);
+/// ```
+pub fn write_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
     try!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
+    encode_message(buffer, msg)
+}
+
+/// Synchronously encode a `Message` to the `Write`
+///
+/// Convert the `Message` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::encode_message(&mut w, &Message { tag: tag, frame: MessageFrame::Tping });
+/// assert_eq!(w.into_inner(), vec![65,0,0,1]);
+/// ```
+pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
     try!(buffer.write_i8(msg.frame.frame_id()));
     try!(encode_tag(buffer, &msg.tag));
-
     encode_frame(buffer, &msg.frame)
 }
 
 // frame codec functions
 
+/// Synchronously encode a `MessageFrame` to the `Write`
+///
+/// Convert the `FrameMessage` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::encode_frame(&mut w, &MessageFrame::Tping);
+/// assert_eq!(w.into_inner(), vec![]); // Tping is 0 length
+/// ```
 pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> io::Result<()> {
     match frame {
         &MessageFrame::Treq(ref f) => encode_treq(writer, f),
@@ -80,7 +155,24 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
     }
 }
 
-// Decodes `data` into a frame if type `tpe`, consuming the entire Read
+/// Synchronously decode a mux `MessageFrame`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has decoded a frame. Frame length is assumed to be triggered by an EOF.
+/// When using use a continuous stream, such as a `TcpStream`, use `Read.take(n)`
+/// if you know the frame length or use read_message above to decode an entire
+/// `Message` and then extract the frame.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+/// use mux::types;
+///
+/// let mut r = Cursor::new(vec![]); // ping frame is empty
+/// let frame = codec::decode_frame(types::TPING, &mut r).unwrap();
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame> {
     Ok(match tpe {
         types::TREQ => MessageFrame::Treq(try!(decode_treq(reader))),
@@ -228,19 +320,22 @@ pub fn decode_contexts<R: Read + ?Sized>(reader: &mut R) -> io::Result<Contexts>
 }
 
 ///////////// Dtab codec functions
-// TODO: optimize this...
-
 pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
-    let ctxs: Vec<(Vec<u8>, Vec<u8>)> = try!(decode_contexts(reader));
-    let mut acc = Vec::with_capacity(ctxs.len());
+    let len = try!(reader.read_u16::<BigEndian>()) as usize;
+    let mut acc = Vec::with_capacity(len);
 
-    for (k, v) in ctxs {
-        let k = try!(to_string(k));
-        let v = try!(to_string(v));
-        acc.push((k, v));
+    for _ in 0..len {
+        let key_len = try!(reader.read_u16::<BigEndian>());
+        let mut key = vec![0;key_len as usize];
+        try!(reader.read_exact(&mut key[..]));
+
+        let val_len = try!(reader.read_u16::<BigEndian>());
+        let mut val = vec![0;val_len as usize];
+        try!(reader.read_exact(&mut val[..]));
+        acc.push((try!(to_string(key)), try!(to_string(val))));
     }
 
-    Ok(Dtab { entries: acc })
+    Ok(Dtab{ entries: acc })
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
