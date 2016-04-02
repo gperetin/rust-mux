@@ -97,11 +97,11 @@ impl SessionReadState {
     }
 
     fn check_ok(&self) -> io::Result<()> {
-        match &self.state {
-            &SessionState::Dispatching => Ok(()),
-            &SessionState::Error(ref k, ref r) => Err(io::Error::new(k.clone(), r.as_str())),
-            &SessionState::Draining  => Err(io::Error::new(ErrorKind::ConnectionRefused, "Draining")),
-            &SessionState::Closed => Err(io::Error::new(ErrorKind::BrokenPipe, "Connection closed")),
+        match self.state {
+            SessionState::Dispatching => Ok(()),
+            SessionState::Error(ref k, ref r) => Err(io::Error::new(k.clone(), r.as_str())),
+            SessionState::Draining  => Err(io::Error::new(ErrorKind::ConnectionRefused, "Draining")),
+            SessionState::Closed => Err(io::Error::new(ErrorKind::BrokenPipe, "Connection closed")),
         }
     }
 
