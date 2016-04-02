@@ -3,7 +3,7 @@ extern crate byteorder;
 use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 
 use std::io;
-use std::io::{Cursor, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::time::Duration;
 
 use super::*;
@@ -12,7 +12,32 @@ use std::{u8, u16};
 
 pub mod size;
 
-// Synchronously read an entire frame
+// concise length checking for encoding length delimited fields
+macro_rules! chklen {
+    ($e:expr, $len:expr) => ({
+        chklen!($e, $len, "Length overflow.")
+    });
+    ($e:expr, $len:expr, $msg:expr) => {
+        if $e.len() > $len as usize {
+            return Err(io::Error::new(ErrorKind::InvalidInput, $msg));
+        }
+    };
+}
+
+/// Synchronously read a whole mux `Message`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has received an entire mux `Message`
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+///
+/// let mut r = Cursor::new(vec![0,0,0,4,65,0,0,0,1,0,0,0,0]); // ping frame plus 4 0's
+/// let frame = codec::read_message(&mut r).unwrap().frame;
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
     let size = {
         let size = try!(input.read_i32::<BigEndian>());
@@ -27,7 +52,21 @@ pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
     decode_message(input.take(size))
 }
 
-// Synchronously read an entire frame consuming the entire Read
+/// Synchronously decode a mux `Message`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has decoded a message. Message length is assumed to be triggered by an EOF.
+/// When using use a continuous stream, such as a `TcpStream`, use `read_message`.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+///
+/// let mut r = Cursor::new(vec![65,0,0,0,1]); // ping frame
+/// let frame = codec::decode_message(&mut r).unwrap().frame;
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
     let tpe = try!(read.read_i8());
     let tag = try!(decode_tag(&mut read));
@@ -39,18 +78,65 @@ pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
     })
 }
 
-// write the Message to the Write
-pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
+/// Synchronously encode a `Message` to the `Write` with the frame size
+///
+/// Convert the `Message` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::write_message(&mut w, &Message { tag: tag, frame: MessageFrame::Tping });
+/// assert_eq!(w.into_inner(), vec![0,0,0,4,65,0,0,1]);
+/// ```
+pub fn write_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
     try!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
+    encode_message(buffer, msg)
+}
+
+/// Synchronously encode a `Message` to the `Write`
+///
+/// Convert the `Message` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::encode_message(&mut w, &Message { tag: tag, frame: MessageFrame::Tping });
+/// assert_eq!(w.into_inner(), vec![65,0,0,1]);
+/// ```
+pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
     try!(buffer.write_i8(msg.frame.frame_id()));
     try!(encode_tag(buffer, &msg.tag));
-
     encode_frame(buffer, &msg.frame)
 }
 
 // frame codec functions
 
+/// Synchronously encode a `MessageFrame` to the `Write`
+///
+/// Convert the `FrameMessage` to a stream of bytes and write it too the `Write`
+/// reference. If the `Write` blocks, this function blocks.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::{Message, MessageFrame, Tag};
+/// use mux::codec;
+///
+/// let mut w = Cursor::new(Vec::new());
+/// let tag = Tag::new(true, 1);
+/// let _ = codec::encode_frame(&mut w, &MessageFrame::Tping);
+/// assert_eq!(w.into_inner(), vec![]); // Tping is 0 length
+/// ```
 pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> io::Result<()> {
     match frame {
         &MessageFrame::Treq(ref f) => encode_treq(writer, f),
@@ -69,7 +155,24 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
     }
 }
 
-// Decodes `data` into a frame if type `tpe`, consuming the entire Read
+/// Synchronously decode a mux `MessageFrame`
+///
+/// This function will synchronously read from the provided `&mut Read` until
+/// it has decoded a frame. Frame length is assumed to be triggered by an EOF.
+/// When using use a continuous stream, such as a `TcpStream`, use `Read.take(n)`
+/// if you know the frame length or use read_message above to decode an entire
+/// `Message` and then extract the frame.
+///
+/// ```rust
+/// use std::io::Cursor;
+/// use mux::MessageFrame;
+/// use mux::codec;
+/// use mux::types;
+///
+/// let mut r = Cursor::new(vec![]); // ping frame is empty
+/// let frame = codec::decode_frame(types::TPING, &mut r).unwrap();
+/// assert_eq!(frame, MessageFrame::Tping);
+/// ```
 pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame> {
     Ok(match tpe {
         types::TREQ => MessageFrame::Treq(try!(decode_treq(reader))),
@@ -118,7 +221,7 @@ pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -
 ///////////// Tag codec functions
 
 const TAG_END_MASK: u32 = 1 << 23; // 24th bit of tag
-const TAG_ID_MASK: u32 = !TAG_END_MASK;
+const TAG_ID_MASK: u32 = MAX_TAG;
 
 pub fn decode_tag<R: Read + ?Sized>(reader: &mut R) -> io::Result<Tag> {
     let mut bts = [0; 3];
@@ -150,18 +253,11 @@ pub fn encode_tag<W: Write + ?Sized>(buffer: &mut W, tag: &Tag) -> io::Result<()
 ///////////// headers codec functions
 
 pub fn encode_headers<W: Write + ?Sized>(writer: &mut W, headers: &Headers) -> io::Result<()> {
-    if headers.len() > u8::MAX as usize {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput, format!("Too many headers: {}", headers.len())
-        ));
-    }
-
+    chklen!(headers, u8::MAX, "Header count overflow");
     try!(writer.write_u8(headers.len() as u8));
 
     for &(ref k, ref v) in headers {
-        if v.len() > u8::MAX as usize {
-            return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid header size"));
-        }
+        chklen!(v, u8::MAX, "Header length overflow");
 
         try!(writer.write_u8(*k));
         try!(writer.write_u8(v.len() as u8));
@@ -188,23 +284,15 @@ pub fn decode_headers<R: Read + ?Sized>(reader: &mut R) -> io::Result<Headers> {
 ///////////// Contexts codec functions
 
 pub fn encode_contexts<W: Write + ?Sized>(writer: &mut W, contexts: &Contexts) -> io::Result<()> {
-    if contexts.len() > u16::MAX as usize {
-        return Err(io::Error::new(ErrorKind::InvalidInput, "Too many contexts to encode"));
-    }
-
-    // check our lengths before trashing the wire state
-    for &(ref k, ref v) in contexts {
-        if k.len() > u16::MAX as usize || v.len() > u16::MAX as usize {
-            return Err(io::Error::new(ErrorKind::InvalidInput, "Context too large to encode"));
-        }
-    }
+    chklen!(contexts, u16::MAX, "Context entries overflow");
 
     try!(writer.write_u16::<BigEndian>(contexts.len() as u16));
-
     for &(ref k, ref v) in contexts {
+        chklen!(k, u16::MAX, "Context key overflow");
         try!(writer.write_u16::<BigEndian>(k.len() as u16));
         try!(writer.write_all(&k[..]));
 
+        chklen!(v, u16::MAX, "Context value overflow");
         try!(writer.write_u16::<BigEndian>(v.len() as u16));
         try!(writer.write_all(&v[..]));
     }
@@ -232,25 +320,30 @@ pub fn decode_contexts<R: Read + ?Sized>(reader: &mut R) -> io::Result<Contexts>
 }
 
 ///////////// Dtab codec functions
-// TODO: optimize this...
-
 pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
-    let ctxs: Vec<(Vec<u8>, Vec<u8>)> = try!(decode_contexts(reader));
-    let mut acc = Vec::with_capacity(ctxs.len());
+    let len = try!(reader.read_u16::<BigEndian>()) as usize;
+    let mut acc = Vec::with_capacity(len);
 
-    for (k, v) in ctxs {
-        let k = try!(to_string(k));
-        let v = try!(to_string(v));
-        acc.push((k, v));
+    for _ in 0..len {
+        let key_len = try!(reader.read_u16::<BigEndian>());
+        let mut key = vec![0;key_len as usize];
+        try!(reader.read_exact(&mut key[..]));
+
+        let val_len = try!(reader.read_u16::<BigEndian>());
+        let mut val = vec![0;val_len as usize];
+        try!(reader.read_exact(&mut val[..]));
+        acc.push((try!(to_string(key)), try!(to_string(val))));
     }
 
-    Ok(Dtab { entries: acc })
+    Ok(Dtab{ entries: acc })
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
+    chklen!(table.entries, u16::MAX, "Dtable length overflow");
     try!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
 
     for &(ref k, ref v) in &table.entries {
+        // the string encoder will check for overflows
         try!(encode_u16_string(writer, k));
         try!(encode_u16_string(writer, v));
     }
@@ -271,6 +364,10 @@ pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
 pub fn encode_init<W: Write + ?Sized>(writer: &mut W, msg: &Init) -> io::Result<()> {
     try!(writer.write_u16::<BigEndian>(msg.version));
 
+    // Not going to bother checking for overflow: if a single one of the
+    // entries overflows then the entire frame overflows which is not the
+    // pervue of this function.
+
     for &(ref k, ref v) in &msg.headers {
         try!(writer.write_u32::<BigEndian>(k.len() as u32));
         try!(writer.write_all(k));
@@ -281,33 +378,34 @@ pub fn encode_init<W: Write + ?Sized>(writer: &mut W, msg: &Init) -> io::Result<
     Ok(())
 }
 
-// TODO: optimize this.
 pub fn decode_init<R: Read>(mut reader: R) -> io::Result<Init> {
-    let mut buffer = Vec::new();
-    try!(reader.read_to_end(&mut buffer));
-    let datalen = buffer.len() as u64;
-
-    let mut buffer = Cursor::new(buffer);
-
-    let version = try!(buffer.read_u16::<BigEndian>());
     let mut headers = Vec::new();
+    let version = try!(reader.read_u16::<BigEndian>());
 
-    while buffer.position() < datalen {
-        let klen = try!(buffer.read_u32::<BigEndian>());
+    loop {
+        let klen = match reader.read_u32::<BigEndian>() {
+            Ok(len) => len,
+            Err(ref e) if e.kind() == ErrorKind::UnexpectedEof => {
+                // termination: out of buffer.
+                return Ok(
+                    Init {
+                        version: version,
+                        headers: headers,
+                    }
+                );
+            }
+            Err(other) => { return Err(other); }
+        };
+
         let mut k = vec![0;klen as usize];
-        try!(buffer.read_exact(&mut k));
+        try!(reader.read_exact(&mut k));
 
-        let vlen = try!(buffer.read_u32::<BigEndian>());
+        let vlen = try!(reader.read_u32::<BigEndian>());
         let mut v = vec![0;vlen as usize];
-        try!(buffer.read_exact(&mut v));
+        try!(reader.read_exact(&mut v));
 
         headers.push((k, v));
     }
-
-    Ok(Init {
-        version: version,
-        headers: headers,
-    })
 }
 
 ///////////// Rdispatch codec functions
@@ -429,13 +527,10 @@ pub fn decode_u16_string<R: Read + ?Sized>(reader: &mut R) -> io::Result<String>
 #[inline]
 pub fn encode_u16_string<W: Write + ?Sized>(writer: &mut W, s: &str) -> io::Result<()> {
     let bytes = s.as_bytes();
-    if bytes.len() <= u16::MAX as usize {
-        try!(writer.write_u16::<BigEndian>(bytes.len() as u16));
-        writer.write_all(bytes)
-    } else {
-        let msg = format!("u16 delimited String too long: {}", bytes.len());
-        Err(io::Error::new(ErrorKind::InvalidData, msg))
-    }
+
+    chklen!(bytes, u16::MAX, "16bit length delimited string overflow");
+    try!(writer.write_u16::<BigEndian>(bytes.len() as u16));
+    writer.write_all(bytes)
 }
 
 #[inline]

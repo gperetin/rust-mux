@@ -8,6 +8,8 @@ pub mod codec;
 pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
 
+pub const MAX_TAG: u32 = (1 << 23) - 1;
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Tag {
     pub end: bool,
@@ -88,6 +90,7 @@ impl Message {
 impl Tag {
     #[inline]
     pub fn new(end: bool, id: u32) -> Tag {
+        assert!(id <= MAX_TAG);
         Tag { end: end, id: id, }
     }
 }
