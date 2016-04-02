@@ -297,3 +297,14 @@ fn roundtrip_tag() {
         id: 0x0fffff,
     });
 }
+
+#[test]
+fn dont_write_invalid_messages() {
+    let mut hdrs = Vec::new();
+    for _ in 0..257 {
+        hdrs.push((0,vec![]));
+    }
+
+    let mut w = io::Cursor::new(Vec::new());
+    assert!(codec::encode_headers(&mut w, &hdrs).is_err());
+}

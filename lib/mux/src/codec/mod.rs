@@ -118,7 +118,7 @@ pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -
 ///////////// Tag codec functions
 
 const TAG_END_MASK: u32 = 1 << 23; // 24th bit of tag
-const TAG_ID_MASK: u32 = !TAG_END_MASK;
+const TAG_ID_MASK: u32 = MAX_TAG;
 
 pub fn decode_tag<R: Read + ?Sized>(reader: &mut R) -> io::Result<Tag> {
     let mut bts = [0; 3];

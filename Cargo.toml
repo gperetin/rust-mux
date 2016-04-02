@@ -1,3 +1,5 @@
+[profile.release]
+debug = true
 
 [package]
 name = "rust-mux"
