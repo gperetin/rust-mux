@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 
 [dependencies]
-byteorder = "0.4.2"
+byteorder = "0.5.1"
 bit-set = "0.3.0"
 time = "0.1.34"

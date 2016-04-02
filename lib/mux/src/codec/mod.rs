@@ -12,29 +12,10 @@ use std::{u8, u16};
 
 pub mod size;
 
-// extract a value from the byteorder::Result
-#[macro_export]
-macro_rules! tryb {
-    ($e:expr) => (
-        match $e {
-            Ok(r) => r,
-            Err(byteorder::Error::UnexpectedEOF) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "End of input"
-                ));
-            }
-            Err(byteorder::Error::Io(err)) => {
-                return Err(err);
-            }
-        }
-    )
-}
-
 // Synchronously read an entire frame
 pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
     let size = {
-        let size = tryb!(input.read_i32::<BigEndian>());
+        let size = try!(input.read_i32::<BigEndian>());
         if size < 4 {
             let msg = format!("Invalid mux frame size: {}. Minimum 4 bytes.", size);
             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
@@ -48,7 +29,7 @@ pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
 
 // Synchronously read an entire frame consuming the entire Read
 pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
-    let tpe = tryb!(read.read_i8());
+    let tpe = try!(read.read_i8());
     let tag = try!(decode_tag(&mut read));
     let frame = try!(decode_frame(tpe, &mut read));
 
@@ -61,8 +42,8 @@ pub fn decode_message<R: Read>(mut read: R) -> io::Result<Message> {
 // write the Message to the Write
 pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::Result<()> {
     // the size is the buffer size + the header (id + tag)
-    tryb!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
-    tryb!(buffer.write_i8(msg.frame.frame_id()));
+    try!(buffer.write_i32::<BigEndian>(size::frame_size(&msg.frame) as i32 + 4));
+    try!(buffer.write_i8(msg.frame.frame_id()));
     try!(encode_tag(buffer, &msg.tag));
 
     encode_frame(buffer, &msg.frame)
@@ -129,8 +110,8 @@ pub fn decode_tlease_duration<R: Read + ?Sized>(reader: &mut R) -> io::Result<Du
 
 pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -> io::Result<()> {
     let millis = d.as_secs()*1000 + (((d.subsec_nanos() as f64)/1e6) as u64);
-    tryb!(writer.write_u8(0));
-    tryb!(writer.write_u64::<BigEndian>(millis));
+    try!(writer.write_u8(0));
+    try!(writer.write_u64::<BigEndian>(millis));
     Ok(())
 }
 
@@ -190,12 +171,12 @@ pub fn encode_headers<W: Write + ?Sized>(writer: &mut W, headers: &Headers) -> i
 }
 
 pub fn decode_headers<R: Read + ?Sized>(reader: &mut R) -> io::Result<Headers> {
-    let len = tryb!(reader.read_u8()) as usize;
+    let len = try!(reader.read_u8()) as usize;
     let mut acc = Vec::with_capacity(len);
 
     for _ in 0..len {
-        let key = tryb!(reader.read_u8());
-        let val_len = tryb!(reader.read_u8());
+        let key = try!(reader.read_u8());
+        let val_len = try!(reader.read_u8());
         let mut val = vec![0;val_len as usize];
         try!(reader.read_exact(&mut val[..]));
         acc.push((key, val));
@@ -218,13 +199,13 @@ pub fn encode_contexts<W: Write + ?Sized>(writer: &mut W, contexts: &Contexts) -
         }
     }
 
-    tryb!(writer.write_u16::<BigEndian>(contexts.len() as u16));
+    try!(writer.write_u16::<BigEndian>(contexts.len() as u16));
 
     for &(ref k, ref v) in contexts {
-        tryb!(writer.write_u16::<BigEndian>(k.len() as u16));
+        try!(writer.write_u16::<BigEndian>(k.len() as u16));
         try!(writer.write_all(&k[..]));
 
-        tryb!(writer.write_u16::<BigEndian>(v.len() as u16));
+        try!(writer.write_u16::<BigEndian>(v.len() as u16));
         try!(writer.write_all(&v[..]));
     }
 
@@ -232,16 +213,16 @@ pub fn encode_contexts<W: Write + ?Sized>(writer: &mut W, contexts: &Contexts) -
 }
 
 pub fn decode_contexts<R: Read + ?Sized>(reader: &mut R) -> io::Result<Contexts> {
-    let len = tryb!(reader.read_u16::<BigEndian>()) as usize;
+    let len = try!(reader.read_u16::<BigEndian>()) as usize;
 
     let mut acc = Vec::with_capacity(len);
 
     for _ in 0..len {
-        let key_len = tryb!(reader.read_u16::<BigEndian>());
+        let key_len = try!(reader.read_u16::<BigEndian>());
         let mut key = vec![0;key_len as usize];
         try!(reader.read_exact(&mut key[..]));
 
-        let val_len = tryb!(reader.read_u16::<BigEndian>());
+        let val_len = try!(reader.read_u16::<BigEndian>());
         let mut val = vec![0;val_len as usize];
         try!(reader.read_exact(&mut val[..]));
         acc.push((key, val));
@@ -267,7 +248,7 @@ pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
-    tryb!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
+    try!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
 
     for &(ref k, ref v) in &table.entries {
         try!(encode_u16_string(writer, k));
@@ -288,12 +269,12 @@ pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
 ///////////// Init codec functions
 
 pub fn encode_init<W: Write + ?Sized>(writer: &mut W, msg: &Init) -> io::Result<()> {
-    tryb!(writer.write_u16::<BigEndian>(msg.version));
+    try!(writer.write_u16::<BigEndian>(msg.version));
 
     for &(ref k, ref v) in &msg.headers {
-        tryb!(writer.write_u32::<BigEndian>(k.len() as u32));
+        try!(writer.write_u32::<BigEndian>(k.len() as u32));
         try!(writer.write_all(k));
-        tryb!(writer.write_u32::<BigEndian>(v.len() as u32));
+        try!(writer.write_u32::<BigEndian>(v.len() as u32));
         try!(writer.write_all(v));
     }
 
@@ -308,15 +289,15 @@ pub fn decode_init<R: Read>(mut reader: R) -> io::Result<Init> {
 
     let mut buffer = Cursor::new(buffer);
 
-    let version = tryb!(buffer.read_u16::<BigEndian>());
+    let version = try!(buffer.read_u16::<BigEndian>());
     let mut headers = Vec::new();
 
     while buffer.position() < datalen {
-        let klen = tryb!(buffer.read_u32::<BigEndian>());
+        let klen = try!(buffer.read_u32::<BigEndian>());
         let mut k = vec![0;klen as usize];
         try!(buffer.read_exact(&mut k));
 
-        let vlen = tryb!(buffer.read_u32::<BigEndian>());
+        let vlen = try!(buffer.read_u32::<BigEndian>());
         let mut v = vec![0;vlen as usize];
         try!(buffer.read_exact(&mut v));
 
@@ -334,14 +315,14 @@ pub fn decode_init<R: Read>(mut reader: R) -> io::Result<Init> {
 pub fn encode_rdispatch<W: Write + ?Sized>(writer: &mut W, frame: &Rdispatch) -> io::Result<()> {
     let (status, body) = rmsg_status_body(&frame.msg);
 
-    tryb!(writer.write_u8(status));
+    try!(writer.write_u8(status));
     try!(encode_contexts(writer, &frame.contexts));
     writer.write_all(body)
 }
 
 // Expects to consume the whole stream
 pub fn decode_rdispatch<R: Read>(mut reader: R) -> io::Result<Rdispatch> {
-    let status = tryb!(reader.read_u8());
+    let status = try!(reader.read_u8());
     let contexts = try!(decode_contexts(&mut reader));
     let mut body = Vec::new();
     let _ = try!(reader.read_to_end(&mut body));
@@ -356,7 +337,7 @@ pub fn decode_rdispatch<R: Read>(mut reader: R) -> io::Result<Rdispatch> {
 
 pub fn encode_rreq<W: Write + ?Sized>(writer: &mut W, frame: &Rmsg) -> io::Result<()> {
     let (status, body) = rmsg_status_body(frame);
-    tryb!(writer.write_u8(status));
+    try!(writer.write_u8(status));
     writer.write_all(body)
 }
 
@@ -437,7 +418,7 @@ fn decode_rmsg_body(status: u8, body: Vec<u8>) -> io::Result<Rmsg> {
 // decode a utf8 string with length specified by a u16 prefix byte
 #[inline]
 pub fn decode_u16_string<R: Read + ?Sized>(reader: &mut R) -> io::Result<String> {
-    let str_len = tryb!(reader.read_u16::<BigEndian>());
+    let str_len = try!(reader.read_u16::<BigEndian>());
     let mut s = vec![0; str_len as usize];
 
     try!(reader.read_exact(&mut s));
@@ -449,7 +430,7 @@ pub fn decode_u16_string<R: Read + ?Sized>(reader: &mut R) -> io::Result<String>
 pub fn encode_u16_string<W: Write + ?Sized>(writer: &mut W, s: &str) -> io::Result<()> {
     let bytes = s.as_bytes();
     if bytes.len() <= u16::MAX as usize {
-        tryb!(writer.write_u16::<BigEndian>(bytes.len() as u16));
+        try!(writer.write_u16::<BigEndian>(bytes.len() as u16));
         writer.write_all(bytes)
     } else {
         let msg = format!("u16 delimited String too long: {}", bytes.len());
