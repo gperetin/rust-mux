@@ -3,7 +3,7 @@ extern crate byteorder;
 use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 
 use std::io;
-use std::io::{Cursor, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::time::Duration;
 
 use super::*;
@@ -11,6 +11,17 @@ use super::*;
 use std::{u8, u16};
 
 pub mod size;
+
+macro_rules! chklen {
+    ($e:expr, $len:expr) => ({
+        chklen!($e, $len, "Length overflow.")
+    });
+    ($e:expr, $len:expr, $msg:expr) => {
+        if $e.len() > $len as usize {
+            return Err(io::Error::new(ErrorKind::InvalidInput, $msg));
+        }
+    };
+}
 
 // Synchronously read an entire frame
 pub fn read_message<R: Read + ?Sized>(input: &mut R) -> io::Result<Message> {
@@ -150,18 +161,11 @@ pub fn encode_tag<W: Write + ?Sized>(buffer: &mut W, tag: &Tag) -> io::Result<()
 ///////////// headers codec functions
 
 pub fn encode_headers<W: Write + ?Sized>(writer: &mut W, headers: &Headers) -> io::Result<()> {
-    if headers.len() > u8::MAX as usize {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput, format!("Too many headers: {}", headers.len())
-        ));
-    }
-
+    chklen!(headers, u8::MAX, "Header count overflow");
     try!(writer.write_u8(headers.len() as u8));
 
     for &(ref k, ref v) in headers {
-        if v.len() > u8::MAX as usize {
-            return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid header size"));
-        }
+        chklen!(v, u8::MAX, "Header length overflow");
 
         try!(writer.write_u8(*k));
         try!(writer.write_u8(v.len() as u8));
@@ -188,23 +192,15 @@ pub fn decode_headers<R: Read + ?Sized>(reader: &mut R) -> io::Result<Headers> {
 ///////////// Contexts codec functions
 
 pub fn encode_contexts<W: Write + ?Sized>(writer: &mut W, contexts: &Contexts) -> io::Result<()> {
-    if contexts.len() > u16::MAX as usize {
-        return Err(io::Error::new(ErrorKind::InvalidInput, "Too many contexts to encode"));
-    }
-
-    // check our lengths before trashing the wire state
-    for &(ref k, ref v) in contexts {
-        if k.len() > u16::MAX as usize || v.len() > u16::MAX as usize {
-            return Err(io::Error::new(ErrorKind::InvalidInput, "Context too large to encode"));
-        }
-    }
+    chklen!(contexts, u16::MAX, "Context entries overflow");
 
     try!(writer.write_u16::<BigEndian>(contexts.len() as u16));
-
     for &(ref k, ref v) in contexts {
+        chklen!(k, u16::MAX, "Context key overflow");
         try!(writer.write_u16::<BigEndian>(k.len() as u16));
         try!(writer.write_all(&k[..]));
 
+        chklen!(v, u16::MAX, "Context value overflow");
         try!(writer.write_u16::<BigEndian>(v.len() as u16));
         try!(writer.write_all(&v[..]));
     }
@@ -248,9 +244,11 @@ pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
+    chklen!(table.entries, u16::MAX, "Dtable length overflow");
     try!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
 
     for &(ref k, ref v) in &table.entries {
+        // the string encoder will check for overflows
         try!(encode_u16_string(writer, k));
         try!(encode_u16_string(writer, v));
     }
@@ -271,6 +269,10 @@ pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
 pub fn encode_init<W: Write + ?Sized>(writer: &mut W, msg: &Init) -> io::Result<()> {
     try!(writer.write_u16::<BigEndian>(msg.version));
 
+    // Not going to bother checking for overflow: if a single one of the
+    // entries overflows then the entire frame overflows which is not the
+    // pervue of this function.
+
     for &(ref k, ref v) in &msg.headers {
         try!(writer.write_u32::<BigEndian>(k.len() as u32));
         try!(writer.write_all(k));
@@ -281,33 +283,34 @@ pub fn encode_init<W: Write + ?Sized>(writer: &mut W, msg: &Init) -> io::Result<
     Ok(())
 }
 
-// TODO: optimize this.
 pub fn decode_init<R: Read>(mut reader: R) -> io::Result<Init> {
-    let mut buffer = Vec::new();
-    try!(reader.read_to_end(&mut buffer));
-    let datalen = buffer.len() as u64;
-
-    let mut buffer = Cursor::new(buffer);
-
-    let version = try!(buffer.read_u16::<BigEndian>());
     let mut headers = Vec::new();
+    let version = try!(reader.read_u16::<BigEndian>());
 
-    while buffer.position() < datalen {
-        let klen = try!(buffer.read_u32::<BigEndian>());
+    loop {
+        let klen = match reader.read_u32::<BigEndian>() {
+            Ok(len) => len,
+            Err(ref e) if e.kind() == ErrorKind::UnexpectedEof => {
+                // termination: out of buffer.
+                return Ok(
+                    Init {
+                        version: version,
+                        headers: headers,
+                    }
+                );
+            }
+            Err(other) => { return Err(other); }
+        };
+
         let mut k = vec![0;klen as usize];
-        try!(buffer.read_exact(&mut k));
+        try!(reader.read_exact(&mut k));
 
-        let vlen = try!(buffer.read_u32::<BigEndian>());
+        let vlen = try!(reader.read_u32::<BigEndian>());
         let mut v = vec![0;vlen as usize];
-        try!(buffer.read_exact(&mut v));
+        try!(reader.read_exact(&mut v));
 
         headers.push((k, v));
     }
-
-    Ok(Init {
-        version: version,
-        headers: headers,
-    })
 }
 
 ///////////// Rdispatch codec functions
@@ -429,13 +432,10 @@ pub fn decode_u16_string<R: Read + ?Sized>(reader: &mut R) -> io::Result<String>
 #[inline]
 pub fn encode_u16_string<W: Write + ?Sized>(writer: &mut W, s: &str) -> io::Result<()> {
     let bytes = s.as_bytes();
-    if bytes.len() <= u16::MAX as usize {
-        try!(writer.write_u16::<BigEndian>(bytes.len() as u16));
-        writer.write_all(bytes)
-    } else {
-        let msg = format!("u16 delimited String too long: {}", bytes.len());
-        Err(io::Error::new(ErrorKind::InvalidData, msg))
-    }
+
+    chklen!(bytes, u16::MAX, "16bit length delimited string overflow");
+    try!(writer.write_u16::<BigEndian>(bytes.len() as u16));
+    writer.write_all(bytes)
 }
 
 #[inline]

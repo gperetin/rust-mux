@@ -299,7 +299,7 @@ fn roundtrip_tag() {
 }
 
 #[test]
-fn dont_write_invalid_messages() {
+fn dont_write_invalid_headers() {
     let mut hdrs = Vec::new();
     for _ in 0..257 {
         hdrs.push((0,vec![]));
