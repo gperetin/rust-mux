@@ -5,12 +5,11 @@ This is a work in progress and may never be useful.
 - Message types (subject to change)
 - Message decoders (subject to change)
 - Message encoders (subject to change)
-- A buffer that shares an underlying array to avoid copies (subject to change)
 
 ___Note___: Everything is subject to change.
 
 ### What may come in the future?
-- Session management
+- Session management (see [wip/session](https://github.com/bryce-anderson/rust-mux/tree/wip/session)
 - Integration with mio
 
 ### License
