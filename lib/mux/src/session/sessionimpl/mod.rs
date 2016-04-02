@@ -2,7 +2,6 @@ extern crate time;
 
 use super::super::*;
 
-use byteorder;
 use byteorder::{WriteBytesExt, BigEndian, ByteOrder};
 
 use std::collections::BTreeMap;
@@ -15,8 +14,6 @@ use std::io::{ErrorKind, Read, Write, BufReader, BufWriter};
 
 use std::sync::{Mutex, Condvar};
 use std::time::Duration;
-
-const MAX_TAG: usize = (1 << 23) - 1;
 
 // Really only used in one place...
 enum Either<L,R> {
@@ -169,7 +166,7 @@ impl MuxSessionImpl {
                 frame: MessageFrame::Tping,
             };
 
-            codec::encode_message(&mut *write, &ping)
+            codec::write_message(&mut *write, &ping)
         }));
 
         let msg = try!(self.dispatch_read(id));
@@ -210,9 +207,8 @@ impl MuxSessionImpl {
     fn dispatch_write(&self, id: u32, write: &mut Write, msg: &Tdispatch) -> io::Result<()> {
         let tag = Tag { end: true, id: id };
 
-        tryb!(write.write_i32::<BigEndian>(codec::size::tdispatch_size(msg) as i32 + 4));
-        tryb!(write.write_i8(types::TDISPATCH));
-
+        try!(write.write_i32::<BigEndian>(codec::size::tdispatch_size(msg) as i32 + 4));
+        try!(write.write_i8(types::TDISPATCH));
         try!(codec::encode_tag(&mut *write, &tag));
         codec::encode_tdispatch(&mut *write, msg)
     }
@@ -354,7 +350,7 @@ impl MuxSessionImpl {
         };
 
         let mut write = self.write.lock().unwrap();
-        try!(codec::encode_message(&mut *write, &ping));
+        try!(codec::write_message(&mut *write, &ping));
         write.flush()
     }
 
