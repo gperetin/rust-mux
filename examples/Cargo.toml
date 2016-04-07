@@ -1,5 +1,6 @@
+
 [package]
-name = "mux"
+name = "rust-mux"
 version = "0.1.0"
 authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 
@@ -7,3 +8,7 @@ authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 byteorder = "0.5.1"
 bit-set = "0.3.0"
 time = "0.1.34"
+rand = "0.3.14"
+
+[dependencies.mux]
+path = "../"
