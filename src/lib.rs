@@ -40,6 +40,7 @@ pub enum MessageFrame {
     Tping,
     Rping,
     Rerr(String),
+    Tdiscarded(Tdiscarded),
     Tlease(Duration),   // Notification of a lease of resources for the specified duration
     // Tdiscarded(String), // Sent by a client to alert the server of a discarded message
 }
@@ -69,6 +70,12 @@ pub enum Rmsg {
     Ok(Vec<u8>),
     Error(String),
     Nack(String),
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Tdiscarded {
+    pub id: u32,
+    pub msg: String,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -107,8 +114,9 @@ impl Dtab {
     }
 
     #[inline]
-    pub fn add_entry(&mut self, key: String, value: String) {
+    pub fn add_entry(&mut self, key: String, value: String) -> &Self {
         self.entries.push((key, value));
+        self
     }
 }
 
@@ -125,6 +133,7 @@ impl MessageFrame {
             &MessageFrame::Rdrain => types::RDRAIN,
             &MessageFrame::Tping => types::TPING,
             &MessageFrame::Rping => types::RPING,
+            &MessageFrame::Tdiscarded(_) => types::TDISCARDED,
             &MessageFrame::Tlease(_) => types::TLEASE,
             &MessageFrame::Rerr(_) => types::RERR,
         }
@@ -149,3 +158,6 @@ impl Tdispatch {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod conformance;
