@@ -150,8 +150,9 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
         &MessageFrame::Rping => Ok(()),
         &MessageFrame::Tdrain => Ok(()),
         &MessageFrame::Rdrain => Ok(()),
+        &MessageFrame::Tdiscarded(ref msg) => encode_tdiscarded(writer, msg),
         &MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
-        &MessageFrame::Rerr(ref msg) => writer.write_all(msg.as_bytes()),
+        &MessageFrame::Rerr(ref msg) => encode_rerr(writer, msg),
     }
 }
 
@@ -173,7 +174,7 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
 /// let frame = codec::decode_frame(types::TPING, &mut r).unwrap();
 /// assert_eq!(frame, MessageFrame::Tping);
 /// ```
-pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame> {
+pub fn decode_frame<R: Read>(tpe: i8, reader: R) -> io::Result<MessageFrame> {
     Ok(match tpe {
         types::TREQ => MessageFrame::Treq(try!(decode_treq(reader))),
         types::RREQ => MessageFrame::Rreq(try!(decode_rreq(reader))),
@@ -185,7 +186,7 @@ pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame>
         types::RDRAIN => MessageFrame::Rdrain,
         types::TPING => MessageFrame::Tping,
         types::RPING => MessageFrame::Rping,
-        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease_duration(&mut reader))),
+        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease_duration(reader))),
         types::RERR => MessageFrame::Rerr(try!(decode_rerr(reader))),
         other => {
             return Err(
@@ -199,7 +200,7 @@ pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame>
 
 ///////////// Tlease codec function
 
-pub fn decode_tlease_duration<R: Read + ?Sized>(reader: &mut R) -> io::Result<Duration> {
+pub fn decode_tlease_duration<R: Read>(mut reader: R) -> io::Result<Duration> {
     let howmuch = try!(reader.read_u8());
     let ticks = try!(reader.read_u64::<BigEndian>());
 
@@ -216,6 +217,31 @@ pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -
     try!(writer.write_u8(0));
     try!(writer.write_u64::<BigEndian>(millis));
     Ok(())
+}
+
+///////////// Tdiscarded codecs
+
+#[inline]
+pub fn decode_tdiscarded<R: Read>(mut reader: R) -> io::Result<Tdiscarded> {
+    let mut bts = [0;3];
+    try!(reader.read_exact(&mut bts[..]));
+    let id = (bts[0] as u32) << 16 | (bts[1] as u32) <<  8 | (bts[2] as u32);
+
+    Ok(Tdiscarded {
+        id: id,
+        msg: try!(decode_rerr(reader)), // both just consume the rest of the body as a String
+    })
+}
+
+#[inline]
+pub fn encode_tdiscarded<W: Write + ?Sized>(writer: &mut W, msg: &Tdiscarded) -> io::Result<()> {
+    let bts = [
+        ((msg.id >> 16) & 0xff) as u8,
+        ((msg.id >>  8) & 0xff) as u8,
+        ( msg.id        & 0xff) as u8,
+    ];
+    try!(writer.write_all(&bts[..]));
+    writer.write_all(msg.msg.as_bytes())
 }
 
 ///////////// Tag codec functions
@@ -357,6 +383,11 @@ pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
     let mut data = Vec::new();
     let _ = try!(reader.read_to_end(&mut data));
     to_string(data)
+}
+
+#[inline]
+pub fn encode_rerr<W: Write + ?Sized>(writer: &mut W, msg: &str) -> io::Result<()> {
+    writer.write_all(msg.as_bytes())
 }
 
 ///////////// Init codec functions
