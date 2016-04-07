@@ -1,15 +1,21 @@
-[profile.release]
-debug = true
-
 [package]
-name = "rust-mux"
+name = "mux"
 version = "0.1.0"
 authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 
-[dependencies]
-byteorder = "0.4.2"
-time = "0.1.34"
-rand = "0.3.14"
+license = "Apache-2.0"
 
-[dependencies.mux]
-path = "./lib/mux/"
+description = "mux codecs for rust"
+homepage = "https://github.com/bryce-anderson/rust-mux"
+repository = "https://github.com/bryce-anderson/rust-mux"
+
+readme = "README.md"
+
+exclude = ["./examples"]
+
+[profile.release]
+debug = true
+
+[dependencies]
+byteorder = "0.5.1"
+time = "0.1.34"
