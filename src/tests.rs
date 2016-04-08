@@ -145,7 +145,7 @@ fn roundtrip_tdispatch() {
     roundtrip_frame(MessageFrame::Tdispatch(Tdispatch {
         contexts: vec![(vec![1, 2, 3], vec![4, 5, 6])],
         dest: "foo".to_string(),
-        dtab: Dtab::from(vec![("foo".to_string(), "bar".to_string())]),
+        dtab: Dtab::from_entries(vec![Dentry::new("foo".to_string(), "bar".to_string())]),
         body: vec![1, 2, 3],
     }));
 
