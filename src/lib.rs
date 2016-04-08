@@ -20,7 +20,6 @@ pub struct Tag {
     pub id: u32,
 }
 
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message {
     pub tag: Tag,
@@ -39,16 +38,25 @@ pub enum MessageFrame {
     Rdrain,
     Tping,
     Rping,
-    Rerr(String),
+    Rerr(Rerr),
     Tdiscarded(Tdiscarded),
-    Tlease(Duration),   // Notification of a lease of resources for the specified duration
+    Tlease(Tlease),   // Notification of a lease of resources for the specified duration
     // Tdiscarded(String), // Sent by a client to alert the server of a discarded message
 }
+
+// Structs that model the message frame types of the mux protocol
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Treq {
     pub headers: Headers,
     pub body: Vec<u8>,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum Rmsg {
+    Ok(Vec<u8>),
+    Error(String),
+    Nack(String),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -66,10 +74,14 @@ pub struct Rdispatch {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Rmsg {
-    Ok(Vec<u8>),
-    Error(String),
-    Nack(String),
+pub struct Init {
+    pub version: u16,
+    pub headers: Contexts,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Rerr {
+    pub msg: String,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -79,10 +91,10 @@ pub struct Tdiscarded {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Init {
-    pub version: u16,
-    pub headers: Contexts,
+pub struct Tlease {
+    pub duration: Duration,
 }
+
 
 impl Message {
     #[inline]

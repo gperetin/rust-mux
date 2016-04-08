@@ -41,7 +41,7 @@ fn test_treq() {
                0x6f, 0x72, 0x6c, 0x64, ];
 
     let expected = Treq { headers: Vec::new(), body: body() };
-    check(buf, &decode_treq, expected, &encode_treq, |t| { MessageFrame::Treq(t)});
+    check(buf, &decode_treq, expected, &encode_treq, |t| MessageFrame::Treq(t));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn test_rreqok() {
                0x6f, 0x72, 0x6c, 0x64, ];
 
     let expected = Rmsg::Ok(body());
-    check(buf, &decode_rreq, expected, &encode_rreq, |t| { MessageFrame::Rreq(t) });
+    check(buf, &decode_rreq, expected, &encode_rreq, |t| MessageFrame::Rreq(t));
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn test_rreqnack() {
     let buf = vec![0x02, ];
 
     let expected = Rmsg::Nack("".to_owned());
-    check(buf, &decode_rreq, expected, &encode_rreq, |t| { MessageFrame::Rreq(t) });
+    check(buf, &decode_rreq, expected, &encode_rreq, |t| MessageFrame::Rreq(t));
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn test_tdispatch_1() {
         body: body(),
     };
 
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t));
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn test_tdispatch_2() {
     encode_tdispatch(&mut w, &expected).unwrap();
 
     assert_eq!(w.into_inner(), buf);
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t));
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn test_tdispatch_3() {
         body: body(),
     };
 
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t));
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_rdispatchok_1() {
         msg: Rmsg::Ok(body()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t));
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_rdispatchok_2() {
         msg: Rmsg::Ok(body()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t));
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn test_rdispatcherror() {
         msg: Rmsg::Error(BUFFER_STR.to_owned()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t));
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn test_rdispatchnack() {
         msg: Rmsg::Nack("".to_owned()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t));
 }
 
 #[test]
@@ -206,15 +206,11 @@ fn test_rerr() {
     let buf = vec![0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f,
                0x72, 0x6c, 0x64, ];
 
-    let msg = decode_rerr(buf.as_slice()).unwrap();
-    let expected = BUFFER_STR.to_owned();
+    let expected = Rerr {
+        msg: BUFFER_STR.to_owned(),
+    };
 
-    assert_eq!(msg, expected);
-
-    let mut w = writer();
-    encode_rerr(&mut w, &expected).unwrap();
-
-    assert_eq!(w.into_inner(), buf);
+    check(buf, &decode_rerr, expected, &encode_rerr, |t| MessageFrame::Rerr(t));
 }
 
 #[test]
@@ -236,7 +232,9 @@ fn test_tlease() {
     // Request type: Tlease(0,1000)
     let buf = vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xe8, ];
 
-    let expected = Duration::from_millis(1000);
+    let expected = Tlease {
+        duration: Duration::from_millis(1000),
+    };
 
-    check(buf, &decode_tlease_duration, expected, &encode_tlease_duration, |t| MessageFrame::Tlease(t));
+    check(buf, &decode_tlease, expected, &encode_tlease, |t| MessageFrame::Tlease(t));
 }
