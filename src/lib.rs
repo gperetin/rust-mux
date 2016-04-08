@@ -2,10 +2,13 @@ extern crate byteorder;
 
 use std::time::Duration;
 
-#[macro_use]
+mod dtab;
+
 pub mod codec;
-pub mod types;
 pub mod session;
+pub mod types;
+
+pub use dtab::*;
 
 pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
@@ -18,10 +21,6 @@ pub struct Tag {
     pub id: u32,
 }
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Dtab {
-    pub entries: Vec<(String, String)>,
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message {
@@ -42,6 +41,7 @@ pub enum MessageFrame {
     Tping,
     Rping,
     Rerr(String),
+    Tdiscarded(Tdiscarded),
     Tlease(Duration),   // Notification of a lease of resources for the specified duration
     // Tdiscarded(String), // Sent by a client to alert the server of a discarded message
 }
@@ -74,6 +74,12 @@ pub enum Rmsg {
 }
 
 #[derive(PartialEq, Eq, Debug)]
+pub struct Tdiscarded {
+    pub id: u32,
+    pub msg: String,
+}
+
+#[derive(PartialEq, Eq, Debug)]
 pub struct Init {
     pub version: u16,
     pub headers: Contexts,
@@ -97,38 +103,24 @@ impl Tag {
     }
 }
 
-impl Dtab {
-    #[inline]
-    pub fn new() -> Dtab {
-        Dtab::from(Vec::new())
-    }
 
-    #[inline]
-    pub fn from(entries: Vec<(String, String)>) -> Dtab {
-        Dtab { entries: entries }
-    }
-
-    #[inline]
-    pub fn add_entry(&mut self, key: String, value: String) {
-        self.entries.push((key, value));
-    }
-}
 
 impl MessageFrame {
     pub fn frame_id(&self) -> i8 {
-        match self {
-            &MessageFrame::Treq(_) => types::TREQ,
-            &MessageFrame::Rreq(_) => types::RREQ,
-            &MessageFrame::Tdispatch(_) => types::TDISPATCH,
-            &MessageFrame::Rdispatch(_) => types::RDISPATCH,
-            &MessageFrame::Tinit(_) => types::TINIT,
-            &MessageFrame::Rinit(_) => types::RINIT,
-            &MessageFrame::Tdrain => types::TDRAIN,
-            &MessageFrame::Rdrain => types::RDRAIN,
-            &MessageFrame::Tping => types::TPING,
-            &MessageFrame::Rping => types::RPING,
-            &MessageFrame::Tlease(_) => types::TLEASE,
-            &MessageFrame::Rerr(_) => types::RERR,
+        match *self {
+            MessageFrame::Treq(_) => types::TREQ,
+            MessageFrame::Rreq(_) => types::RREQ,
+            MessageFrame::Tdispatch(_) => types::TDISPATCH,
+            MessageFrame::Rdispatch(_) => types::RDISPATCH,
+            MessageFrame::Tinit(_) => types::TINIT,
+            MessageFrame::Rinit(_) => types::RINIT,
+            MessageFrame::Tdrain => types::TDRAIN,
+            MessageFrame::Rdrain => types::RDRAIN,
+            MessageFrame::Tping => types::TPING,
+            MessageFrame::Rping => types::RPING,
+            MessageFrame::Tdiscarded(_) => types::TDISCARDED,
+            MessageFrame::Tlease(_) => types::TLEASE,
+            MessageFrame::Rerr(_) => types::RERR,
         }
     }
 }
@@ -151,3 +143,6 @@ impl Tdispatch {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod conformance;

@@ -138,20 +138,21 @@ pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::R
 /// assert_eq!(w.into_inner(), vec![]); // Tping is 0 length
 /// ```
 pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> io::Result<()> {
-    match frame {
-        &MessageFrame::Treq(ref f) => encode_treq(writer, f),
-        &MessageFrame::Rreq(ref f) => encode_rreq(writer, f),
-        &MessageFrame::Tdispatch(ref f) => encode_tdispatch(writer, f),
-        &MessageFrame::Rdispatch(ref f) => encode_rdispatch(writer, f),
-        &MessageFrame::Tinit(ref f) => encode_init(writer, f),
-        &MessageFrame::Rinit(ref f) => encode_init(writer, f),
+    match *frame {
+        MessageFrame::Treq(ref f) => encode_treq(writer, f),
+        MessageFrame::Rreq(ref f) => encode_rreq(writer, f),
+        MessageFrame::Tdispatch(ref f) => encode_tdispatch(writer, f),
+        MessageFrame::Rdispatch(ref f) => encode_rdispatch(writer, f),
+        MessageFrame::Tinit(ref f) => encode_init(writer, f),
+        MessageFrame::Rinit(ref f) => encode_init(writer, f),
         // the following are empty messages
-        &MessageFrame::Tping => Ok(()),
-        &MessageFrame::Rping => Ok(()),
-        &MessageFrame::Tdrain => Ok(()),
-        &MessageFrame::Rdrain => Ok(()),
-        &MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
-        &MessageFrame::Rerr(ref msg) => writer.write_all(msg.as_bytes()),
+        MessageFrame::Tping => Ok(()),
+        MessageFrame::Rping => Ok(()),
+        MessageFrame::Tdrain => Ok(()),
+        MessageFrame::Rdrain => Ok(()),
+        MessageFrame::Tdiscarded(ref msg) => encode_tdiscarded(writer, msg),
+        MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
+        MessageFrame::Rerr(ref msg) => encode_rerr(writer, msg),
     }
 }
 
@@ -173,7 +174,7 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
 /// let frame = codec::decode_frame(types::TPING, &mut r).unwrap();
 /// assert_eq!(frame, MessageFrame::Tping);
 /// ```
-pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame> {
+pub fn decode_frame<R: Read>(tpe: i8, reader: R) -> io::Result<MessageFrame> {
     Ok(match tpe {
         types::TREQ => MessageFrame::Treq(try!(decode_treq(reader))),
         types::RREQ => MessageFrame::Rreq(try!(decode_rreq(reader))),
@@ -185,7 +186,7 @@ pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame>
         types::RDRAIN => MessageFrame::Rdrain,
         types::TPING => MessageFrame::Tping,
         types::RPING => MessageFrame::Rping,
-        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease_duration(&mut reader))),
+        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease_duration(reader))),
         types::RERR => MessageFrame::Rerr(try!(decode_rerr(reader))),
         other => {
             return Err(
@@ -199,7 +200,7 @@ pub fn decode_frame<R: Read>(tpe: i8, mut reader: R) -> io::Result<MessageFrame>
 
 ///////////// Tlease codec function
 
-pub fn decode_tlease_duration<R: Read + ?Sized>(reader: &mut R) -> io::Result<Duration> {
+pub fn decode_tlease_duration<R: Read>(mut reader: R) -> io::Result<Duration> {
     let howmuch = try!(reader.read_u8());
     let ticks = try!(reader.read_u64::<BigEndian>());
 
@@ -216,6 +217,31 @@ pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -
     try!(writer.write_u8(0));
     try!(writer.write_u64::<BigEndian>(millis));
     Ok(())
+}
+
+///////////// Tdiscarded codecs
+
+#[inline]
+pub fn decode_tdiscarded<R: Read>(mut reader: R) -> io::Result<Tdiscarded> {
+    let mut bts = [0;3];
+    try!(reader.read_exact(&mut bts[..]));
+    let id = (bts[0] as u32) << 16 | (bts[1] as u32) <<  8 | (bts[2] as u32);
+
+    Ok(Tdiscarded {
+        id: id,
+        msg: try!(decode_rerr(reader)), // both just consume the rest of the body as a String
+    })
+}
+
+#[inline]
+pub fn encode_tdiscarded<W: Write + ?Sized>(writer: &mut W, msg: &Tdiscarded) -> io::Result<()> {
+    let bts = [
+        ((msg.id >> 16) & 0xff) as u8,
+        ((msg.id >>  8) & 0xff) as u8,
+        ( msg.id        & 0xff) as u8,
+    ];
+    try!(writer.write_all(&bts[..]));
+    writer.write_all(msg.msg.as_bytes())
 }
 
 ///////////// Tag codec functions
@@ -332,20 +358,20 @@ pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
         let val_len = try!(reader.read_u16::<BigEndian>());
         let mut val = vec![0;val_len as usize];
         try!(reader.read_exact(&mut val[..]));
-        acc.push((try!(to_string(key)), try!(to_string(val))));
+        acc.push(Dentry::new(try!(to_string(key)), try!(to_string(val))));
     }
 
-    Ok(Dtab{ entries: acc })
+    Ok(Dtab::from_entries(acc))
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
     chklen!(table.entries, u16::MAX, "Dtable length overflow");
     try!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
 
-    for &(ref k, ref v) in &table.entries {
+    for dentry in &table.entries {
         // the string encoder will check for overflows
-        try!(encode_u16_string(writer, k));
-        try!(encode_u16_string(writer, v));
+        try!(encode_u16_string(writer, &dentry.key));
+        try!(encode_u16_string(writer, &dentry.val));
     }
     Ok(())
 }
@@ -357,6 +383,11 @@ pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
     let mut data = Vec::new();
     let _ = try!(reader.read_to_end(&mut data));
     to_string(data)
+}
+
+#[inline]
+pub fn encode_rerr<W: Write + ?Sized>(writer: &mut W, msg: &str) -> io::Result<()> {
+    writer.write_all(msg.as_bytes())
 }
 
 ///////////// Init codec functions
@@ -492,10 +523,10 @@ pub fn encode_treq<W: Write + ?Sized>(writer: &mut W, msg: &Treq) -> io::Result<
 
 #[inline]
 fn rmsg_status_body(msg: &Rmsg) -> (u8, &[u8]) {
-    match msg {
-        &Rmsg::Ok(ref body) => (0, body.as_ref()),
-        &Rmsg::Error(ref msg) => (1, msg.as_bytes()),
-        &Rmsg::Nack(ref msg) => (2, msg.as_bytes()),
+    match *msg {
+        Rmsg::Ok(ref body) => (0, body.as_ref()),
+        Rmsg::Error(ref msg) => (1, msg.as_bytes()),
+        Rmsg::Nack(ref msg) => (2, msg.as_bytes()),
     }
 }
 
