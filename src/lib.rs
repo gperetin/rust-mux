@@ -122,20 +122,20 @@ impl Dtab {
 
 impl MessageFrame {
     pub fn frame_id(&self) -> i8 {
-        match self {
-            &MessageFrame::Treq(_) => types::TREQ,
-            &MessageFrame::Rreq(_) => types::RREQ,
-            &MessageFrame::Tdispatch(_) => types::TDISPATCH,
-            &MessageFrame::Rdispatch(_) => types::RDISPATCH,
-            &MessageFrame::Tinit(_) => types::TINIT,
-            &MessageFrame::Rinit(_) => types::RINIT,
-            &MessageFrame::Tdrain => types::TDRAIN,
-            &MessageFrame::Rdrain => types::RDRAIN,
-            &MessageFrame::Tping => types::TPING,
-            &MessageFrame::Rping => types::RPING,
-            &MessageFrame::Tdiscarded(_) => types::TDISCARDED,
-            &MessageFrame::Tlease(_) => types::TLEASE,
-            &MessageFrame::Rerr(_) => types::RERR,
+        match *self {
+            MessageFrame::Treq(_) => types::TREQ,
+            MessageFrame::Rreq(_) => types::RREQ,
+            MessageFrame::Tdispatch(_) => types::TDISPATCH,
+            MessageFrame::Rdispatch(_) => types::RDISPATCH,
+            MessageFrame::Tinit(_) => types::TINIT,
+            MessageFrame::Rinit(_) => types::RINIT,
+            MessageFrame::Tdrain => types::TDRAIN,
+            MessageFrame::Rdrain => types::RDRAIN,
+            MessageFrame::Tping => types::TPING,
+            MessageFrame::Rping => types::RPING,
+            MessageFrame::Tdiscarded(_) => types::TDISCARDED,
+            MessageFrame::Tlease(_) => types::TLEASE,
+            MessageFrame::Rerr(_) => types::RERR,
         }
     }
 }

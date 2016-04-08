@@ -138,21 +138,21 @@ pub fn encode_message<W: Write + ?Sized>(buffer: &mut W, msg: &Message) -> io::R
 /// assert_eq!(w.into_inner(), vec![]); // Tping is 0 length
 /// ```
 pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> io::Result<()> {
-    match frame {
-        &MessageFrame::Treq(ref f) => encode_treq(writer, f),
-        &MessageFrame::Rreq(ref f) => encode_rreq(writer, f),
-        &MessageFrame::Tdispatch(ref f) => encode_tdispatch(writer, f),
-        &MessageFrame::Rdispatch(ref f) => encode_rdispatch(writer, f),
-        &MessageFrame::Tinit(ref f) => encode_init(writer, f),
-        &MessageFrame::Rinit(ref f) => encode_init(writer, f),
+    match *frame {
+        MessageFrame::Treq(ref f) => encode_treq(writer, f),
+        MessageFrame::Rreq(ref f) => encode_rreq(writer, f),
+        MessageFrame::Tdispatch(ref f) => encode_tdispatch(writer, f),
+        MessageFrame::Rdispatch(ref f) => encode_rdispatch(writer, f),
+        MessageFrame::Tinit(ref f) => encode_init(writer, f),
+        MessageFrame::Rinit(ref f) => encode_init(writer, f),
         // the following are empty messages
-        &MessageFrame::Tping => Ok(()),
-        &MessageFrame::Rping => Ok(()),
-        &MessageFrame::Tdrain => Ok(()),
-        &MessageFrame::Rdrain => Ok(()),
-        &MessageFrame::Tdiscarded(ref msg) => encode_tdiscarded(writer, msg),
-        &MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
-        &MessageFrame::Rerr(ref msg) => encode_rerr(writer, msg),
+        MessageFrame::Tping => Ok(()),
+        MessageFrame::Rping => Ok(()),
+        MessageFrame::Tdrain => Ok(()),
+        MessageFrame::Rdrain => Ok(()),
+        MessageFrame::Tdiscarded(ref msg) => encode_tdiscarded(writer, msg),
+        MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
+        MessageFrame::Rerr(ref msg) => encode_rerr(writer, msg),
     }
 }
 
@@ -523,10 +523,10 @@ pub fn encode_treq<W: Write + ?Sized>(writer: &mut W, msg: &Treq) -> io::Result<
 
 #[inline]
 fn rmsg_status_body(msg: &Rmsg) -> (u8, &[u8]) {
-    match msg {
-        &Rmsg::Ok(ref body) => (0, body.as_ref()),
-        &Rmsg::Error(ref msg) => (1, msg.as_bytes()),
-        &Rmsg::Nack(ref msg) => (2, msg.as_bytes()),
+    match *msg {
+        Rmsg::Ok(ref body) => (0, body.as_ref()),
+        Rmsg::Error(ref msg) => (1, msg.as_bytes()),
+        Rmsg::Nack(ref msg) => (2, msg.as_bytes()),
     }
 }
 
