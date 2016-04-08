@@ -18,7 +18,7 @@ fn body() -> Vec<u8> {
     BUFFER_STR.to_owned().into_bytes()
 }
 
-fn check<T, F1, F2, F3>(buf: Vec<u8>, decode: &F1, expected: T, encode: &F2, size: F3) -> ()
+fn check<T, F1, F2, F3>(buf: Vec<u8>, decode: F1, expected: T, encode: F2, size: F3) -> ()
     where F1: Fn(Cursor<Vec<u8>>) -> io::Result<T>,
           F2: Fn(&mut Cursor<Vec<u8>>, &T) -> io::Result<()>,
           F3: FnOnce(T) -> MessageFrame,
