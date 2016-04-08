@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use super::*;
 use codec::*;
+use codec::size::*;
 
 const BUFFER_STR: &'static str = "hello world";
 
@@ -17,9 +18,10 @@ fn body() -> Vec<u8> {
     BUFFER_STR.to_owned().into_bytes()
 }
 
-fn check<T, F1, F2>(buf: Vec<u8>, decode: &F1, expected: T, encode: &F2) -> ()
+fn check<T, F1, F2, F3>(buf: Vec<u8>, decode: &F1, expected: T, encode: &F2, size: F3) -> ()
     where F1: Fn(Cursor<Vec<u8>>) -> io::Result<T>,
           F2: Fn(&mut Cursor<Vec<u8>>, &T) -> io::Result<()>,
+          F3: FnOnce(T) -> MessageFrame,
           T: PartialEq + Debug
 {
     let msg = decode(Cursor::new(buf.clone())).unwrap();
@@ -28,6 +30,7 @@ fn check<T, F1, F2>(buf: Vec<u8>, decode: &F1, expected: T, encode: &F2) -> ()
     let mut w = writer();
     encode(&mut w, &expected).unwrap();
 
+    assert_eq!(frame_size(&size(expected)), buf.len());
     assert_eq!(w.into_inner(), buf);
 }
 
@@ -38,7 +41,7 @@ fn test_treq() {
                0x6f, 0x72, 0x6c, 0x64, ];
 
     let expected = Treq { headers: Vec::new(), body: body() };
-    check(buf, &decode_treq, expected, &encode_treq);
+    check(buf, &decode_treq, expected, &encode_treq, |t| { MessageFrame::Treq(t)});
 }
 
 #[test]
@@ -48,7 +51,7 @@ fn test_rreqok() {
                0x6f, 0x72, 0x6c, 0x64, ];
 
     let expected = Rmsg::Ok(body());
-    check(buf, &decode_rreq, expected, &encode_rreq);
+    check(buf, &decode_rreq, expected, &encode_rreq, |t| { MessageFrame::Rreq(t) });
 }
 
 #[test]
@@ -58,7 +61,7 @@ fn test_rreqerror() {
                0x6f, 0x72, 0x6c, 0x64, ];
 
     let expected = Rmsg::Error(BUFFER_STR.to_owned());
-    check(buf, &decode_rreq, expected, &encode_rreq);
+    check(buf, &decode_rreq, expected, &encode_rreq, |t| MessageFrame::Rreq(t));
 }
 
 #[test]
@@ -67,7 +70,7 @@ fn test_rreqnack() {
     let buf = vec![0x02, ];
 
     let expected = Rmsg::Nack("".to_owned());
-    check(buf, &decode_rreq, expected, &encode_rreq);
+    check(buf, &decode_rreq, expected, &encode_rreq, |t| { MessageFrame::Rreq(t) });
 }
 
 #[test]
@@ -84,7 +87,7 @@ fn test_tdispatch_1() {
         body: body(),
     };
 
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch);
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
 }
 
 #[test]
@@ -112,7 +115,7 @@ fn test_tdispatch_2() {
     encode_tdispatch(&mut w, &expected).unwrap();
 
     assert_eq!(w.into_inner(), buf);
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch);
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
 }
 
 #[test]
@@ -135,7 +138,7 @@ fn test_tdispatch_3() {
         body: body(),
     };
 
-    check(buf, &decode_tdispatch, expected, &encode_tdispatch);
+    check(buf, &decode_tdispatch, expected, &encode_tdispatch, |t| MessageFrame::Tdispatch(t) );
 }
 
 #[test]
@@ -149,7 +152,7 @@ fn test_rdispatchok_1() {
         msg: Rmsg::Ok(body()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch);
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
 }
 
 #[test]
@@ -167,7 +170,7 @@ fn test_rdispatchok_2() {
         msg: Rmsg::Ok(body()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch);
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
 }
 
 #[test]
@@ -181,7 +184,7 @@ fn test_rdispatcherror() {
         msg: Rmsg::Error(BUFFER_STR.to_owned()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch);
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
 }
 
 #[test]
@@ -194,7 +197,7 @@ fn test_rdispatchnack() {
         msg: Rmsg::Nack("".to_owned()),
     };
 
-    check(buf, &decode_rdispatch, expected, &encode_rdispatch);
+    check(buf, &decode_rdispatch, expected, &encode_rdispatch, |t| MessageFrame::Rdispatch(t) );
 }
 
 #[test]
@@ -225,7 +228,7 @@ fn test_tdiscarded() {
         msg: BUFFER_STR.to_owned(),
     };
 
-    check(buf, &decode_tdiscarded, expected, &encode_tdiscarded);
+    check(buf, &decode_tdiscarded, expected, &encode_tdiscarded, |t| MessageFrame::Tdiscarded(t));
 }
 
 #[test]
@@ -235,5 +238,5 @@ fn test_tlease() {
 
     let expected = Duration::from_millis(1000);
 
-    check(buf, &decode_tlease_duration, expected, &encode_tlease_duration);
+    check(buf, &decode_tlease_duration, expected, &encode_tlease_duration, |t| MessageFrame::Tlease(t));
 }
