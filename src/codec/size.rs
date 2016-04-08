@@ -3,20 +3,20 @@ use super::super::*;
 // size related functions
 
 pub fn frame_size(frame: &MessageFrame) -> usize {
-    match frame {
-        &MessageFrame::Treq(ref f) => treq_size(f),
-        &MessageFrame::Rreq(ref f) => 1 + rmsg_size(f),
-        &MessageFrame::Tdispatch(ref f) => tdispatch_size(f),
-        &MessageFrame::Rdispatch(ref f) => rdispatch_size(f),
-        &MessageFrame::Tinit(ref f) => init_size(f),
-        &MessageFrame::Rinit(ref f) => init_size(f),
-        &MessageFrame::Tdrain => 0,
-        &MessageFrame::Rdrain => 0,
-        &MessageFrame::Tping => 0,
-        &MessageFrame::Rping => 0,
-        &MessageFrame::Tlease(_) => 9,
-        &MessageFrame::Tdiscarded(ref m) => 3 + m.msg.as_bytes().len(),
-        &MessageFrame::Rerr(ref msg) => msg.as_bytes().len(),
+    match *frame {
+        MessageFrame::Treq(ref f) => treq_size(f),
+        MessageFrame::Rreq(ref f) => 1 + rmsg_size(f),
+        MessageFrame::Tdispatch(ref f) => tdispatch_size(f),
+        MessageFrame::Rdispatch(ref f) => rdispatch_size(f),
+        MessageFrame::Tinit(ref f) => init_size(f),
+        MessageFrame::Rinit(ref f) => init_size(f),
+        MessageFrame::Tdrain => 0,
+        MessageFrame::Rdrain => 0,
+        MessageFrame::Tping => 0,
+        MessageFrame::Rping => 0,
+        MessageFrame::Tlease(_) => 9,
+        MessageFrame::Tdiscarded(ref m) => 3 + m.msg.as_bytes().len(),
+        MessageFrame::Rerr(ref msg) => msg.as_bytes().len(),
     }
 }
 
@@ -31,10 +31,10 @@ pub fn tdispatch_size(msg: &Tdispatch) -> usize {
 }
 
 pub fn rdispatch_size(msg: &Rdispatch) -> usize {
-    1 + context_size(&msg.contexts) + match &msg.msg {
-        &Rmsg::Ok(ref body) => body.len(),
-        &Rmsg::Error(ref msg) => msg.as_bytes().len(),
-        &Rmsg::Nack(ref msg) => msg.as_bytes().len(),
+    1 + context_size(&msg.contexts) + match msg.msg {
+        Rmsg::Ok(ref body) => body.len(),
+        Rmsg::Error(ref msg) => msg.as_bytes().len(),
+        Rmsg::Nack(ref msg) => msg.as_bytes().len(),
     }
 }
 
@@ -50,10 +50,10 @@ pub fn treq_size(treq: &Treq) -> usize {
 
 #[inline]
 pub fn rmsg_size(msg: &Rmsg) -> usize {
-    match msg {
-        &Rmsg::Ok(ref b) => b.len(),
-        &Rmsg::Error(ref m) => m.as_bytes().len(),
-        &Rmsg::Nack(ref m) => m.as_bytes().len(),
+    match *msg {
+        Rmsg::Ok(ref b) => b.len(),
+        Rmsg::Error(ref m) => m.as_bytes().len(),
+        Rmsg::Nack(ref m) => m.as_bytes().len(),
     }
 }
 
