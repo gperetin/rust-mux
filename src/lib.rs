@@ -2,8 +2,12 @@ extern crate byteorder;
 
 use std::time::Duration;
 
-pub mod types;
+mod dtab;
+
 pub mod codec;
+pub mod types;
+
+pub use dtab::*;
 
 pub type Headers = Vec<(u8, Vec<u8>)>;
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
@@ -16,10 +20,6 @@ pub struct Tag {
     pub id: u32,
 }
 
-#[derive(PartialEq, Eq, Debug)]
-pub struct Dtab {
-    pub entries: Vec<(String, String)>,
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message {
@@ -102,23 +102,7 @@ impl Tag {
     }
 }
 
-impl Dtab {
-    #[inline]
-    pub fn new() -> Dtab {
-        Dtab::from(Vec::new())
-    }
 
-    #[inline]
-    pub fn from(entries: Vec<(String, String)>) -> Dtab {
-        Dtab { entries: entries }
-    }
-
-    #[inline]
-    pub fn add_entry(&mut self, key: String, value: String) -> &Self {
-        self.entries.push((key, value));
-        self
-    }
-}
 
 impl MessageFrame {
     pub fn frame_id(&self) -> i8 {

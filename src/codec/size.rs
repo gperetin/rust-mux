@@ -84,10 +84,10 @@ pub fn context_size(contexts: &Contexts) -> usize {
 pub fn dtab_size(table: &Dtab) -> usize {
     let mut size = 2; // context size
 
-    for &(ref k, ref v) in &table.entries {
+    for dentry in &table.entries {
         size += 4; // the two lengths
-        size += k.as_bytes().len();
-        size += v.as_bytes().len();
+        size += dentry.key.as_bytes().len();
+        size += dentry.val.as_bytes().len();
     }
 
     size

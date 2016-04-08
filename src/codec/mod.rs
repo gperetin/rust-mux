@@ -358,20 +358,20 @@ pub fn decode_dtab<R: Read + ?Sized>(reader: &mut R) -> io::Result<Dtab> {
         let val_len = try!(reader.read_u16::<BigEndian>());
         let mut val = vec![0;val_len as usize];
         try!(reader.read_exact(&mut val[..]));
-        acc.push((try!(to_string(key)), try!(to_string(val))));
+        acc.push(Dentry::new(try!(to_string(key)), try!(to_string(val))));
     }
 
-    Ok(Dtab{ entries: acc })
+    Ok(Dtab::from_entries(acc))
 }
 
 pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Result<()> {
     chklen!(table.entries, u16::MAX, "Dtable length overflow");
     try!(writer.write_u16::<BigEndian>(table.entries.len() as u16));
 
-    for &(ref k, ref v) in &table.entries {
+    for dentry in &table.entries {
         // the string encoder will check for overflows
-        try!(encode_u16_string(writer, k));
-        try!(encode_u16_string(writer, v));
+        try!(encode_u16_string(writer, &dentry.key));
+        try!(encode_u16_string(writer, &dentry.val));
     }
     Ok(())
 }
