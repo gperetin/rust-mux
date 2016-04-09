@@ -44,3 +44,9 @@ impl Dtab {
         self
     }
 }
+
+impl Default for Dtab {
+    fn default() -> Dtab {
+        Dtab::new()
+    }
+}
