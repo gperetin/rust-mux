@@ -1,12 +1,13 @@
+extern crate mux;
 
 use std::fmt::Debug;
 use std::io;
 use std::io::Cursor;
 use std::time::Duration;
 
-use super::*;
-use codec::*;
-use codec::size::*;
+use mux::*;
+use mux::codec::*;
+use mux::codec::size::*;
 
 const BUFFER_STR: &'static str = "hello world";
 

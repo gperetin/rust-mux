@@ -1,7 +1,7 @@
-use super::*;
+extern crate mux;
 
+use mux::*;
 use std::io;
-
 
 static TDISPATCH_BUF: &'static [u8] = &[
     0, 0, 0, 65, // frame size
