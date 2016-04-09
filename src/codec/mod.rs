@@ -150,9 +150,9 @@ pub fn encode_frame<W: Write + ?Sized>(writer: &mut W, frame: &MessageFrame) -> 
         MessageFrame::Rping => Ok(()),
         MessageFrame::Tdrain => Ok(()),
         MessageFrame::Rdrain => Ok(()),
-        MessageFrame::Tdiscarded(ref msg) => encode_tdiscarded(writer, msg),
-        MessageFrame::Tlease(ref d) => encode_tlease_duration(writer, d),
-        MessageFrame::Rerr(ref msg) => encode_rerr(writer, msg),
+        MessageFrame::Tdiscarded(ref f) => encode_tdiscarded(writer, f),
+        MessageFrame::Tlease(ref f) => encode_tlease(writer, f),
+        MessageFrame::Rerr(ref f) => encode_rerr(writer, f),
     }
 }
 
@@ -186,7 +186,7 @@ pub fn decode_frame<R: Read>(tpe: i8, reader: R) -> io::Result<MessageFrame> {
         types::RDRAIN => MessageFrame::Rdrain,
         types::TPING => MessageFrame::Tping,
         types::RPING => MessageFrame::Rping,
-        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease_duration(reader))),
+        types::TLEASE => MessageFrame::Tlease(try!(decode_tlease(reader))),
         types::RERR => MessageFrame::Rerr(try!(decode_rerr(reader))),
         other => {
             return Err(
@@ -200,19 +200,22 @@ pub fn decode_frame<R: Read>(tpe: i8, reader: R) -> io::Result<MessageFrame> {
 
 ///////////// Tlease codec function
 
-pub fn decode_tlease_duration<R: Read>(mut reader: R) -> io::Result<Duration> {
+pub fn decode_tlease<R: Read>(mut reader: R) -> io::Result<Tlease> {
     let howmuch = try!(reader.read_u8());
     let ticks = try!(reader.read_u64::<BigEndian>());
 
     if howmuch == 0 {
-        Ok(Duration::from_millis(ticks))
+        Ok(Tlease {
+            duration: Duration::from_millis(ticks),
+        })
     } else {
         let message = format!("Unknown Tlease 'howmuch' code: {}", howmuch);
         Err(io::Error::new(ErrorKind::InvalidData, message))
     }
 }
 
-pub fn encode_tlease_duration<W: Write + ?Sized>(writer: &mut W, d: &Duration) -> io::Result<()> {
+pub fn encode_tlease<W: Write + ?Sized>(writer: &mut W, tlease: &Tlease) -> io::Result<()> {
+    let d = &tlease.duration;
     let millis = d.as_secs()*1000 + (((d.subsec_nanos() as f64)/1e6) as u64);
     try!(writer.write_u8(0));
     try!(writer.write_u64::<BigEndian>(millis));
@@ -226,10 +229,11 @@ pub fn decode_tdiscarded<R: Read>(mut reader: R) -> io::Result<Tdiscarded> {
     let mut bts = [0;3];
     try!(reader.read_exact(&mut bts[..]));
     let id = (bts[0] as u32) << 16 | (bts[1] as u32) <<  8 | (bts[2] as u32);
+    let msg = try!(body_as_string(reader));
 
     Ok(Tdiscarded {
         id: id,
-        msg: try!(decode_rerr(reader)), // both just consume the rest of the body as a String
+        msg: msg,
     })
 }
 
@@ -379,15 +383,14 @@ pub fn encode_dtab<W: Write + ?Sized>(writer: &mut W, table: &Dtab) -> io::Resul
 ///////////// Rerr codec functions
 
 #[inline]
-pub fn decode_rerr<R: Read>(mut reader: R) -> io::Result<String> {
-    let mut data = Vec::new();
-    let _ = try!(reader.read_to_end(&mut data));
-    to_string(data)
+pub fn decode_rerr<R: Read>(reader: R) -> io::Result<Rerr> {
+    let msg = try!(body_as_string(reader));
+    Ok(Rerr { msg: msg, })
 }
 
 #[inline]
-pub fn encode_rerr<W: Write + ?Sized>(writer: &mut W, msg: &str) -> io::Result<()> {
-    writer.write_all(msg.as_bytes())
+pub fn encode_rerr<W: Write + ?Sized>(writer: &mut W, rerr: &Rerr) -> io::Result<()> {
+    writer.write_all(rerr.msg.as_bytes())
 }
 
 ///////////// Init codec functions
@@ -570,4 +573,11 @@ fn to_string(vec: Vec<u8>) -> io::Result<String> {
         Ok(s) => Ok(s),
         Err(_) => Err(io::Error::new(ErrorKind::InvalidData, "Invalid UTF8 field")),
     }
+}
+
+#[inline]
+fn body_as_string<R: Read>(mut reader: R) -> io::Result<String> {
+    let mut data = Vec::new();
+    let _ = try!(reader.read_to_end(&mut data));
+    to_string(data)
 }

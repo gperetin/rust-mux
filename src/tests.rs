@@ -224,7 +224,7 @@ fn roundtrip_rping() {
 
 #[test]
 fn roundtrip_rerr() {
-    roundtrip_frame(MessageFrame::Rerr("Foo!".to_owned()));
+    roundtrip_frame(MessageFrame::Rerr(Rerr{ msg: "Foo!".to_owned() }));
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn roundtrip_tlease() {
     use std::time::Duration;
 
     // note that this will fail for precision below 1 ms
-    roundtrip_frame(MessageFrame::Tlease(Duration::new(123, 1_000_000)));
+    roundtrip_frame(MessageFrame::Tlease(Tlease{ duration: Duration::new(123, 1_000_000) }));
 }
 
 #[test]

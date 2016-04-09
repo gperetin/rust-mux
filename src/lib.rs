@@ -1,32 +1,44 @@
 extern crate byteorder;
 
-use std::time::Duration;
-
 mod dtab;
-
 pub mod codec;
 pub mod types;
 
 pub use dtab::*;
+use std::time::Duration;
 
+/// Headers for a `Treq`.
 pub type Headers = Vec<(u8, Vec<u8>)>;
+
+/// Contexts of dispatch and init messages.
 pub type Contexts = Vec<(Vec<u8>, Vec<u8>)>;
 
+/// Maximum value of a mux Tag
 pub const MAX_TAG: u32 = (1 << 23) - 1;
 
+/// Id number and end flag for message frames.
+///
+/// Every message has a `Tag` following the frame length and frame
+/// type on the wire. The frame id is limited to 23 bits of precision
+/// while bit 24 signals if the message stream is ending. This only
+/// applies to the `Tdispatch` and `Rdispatch` frames.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Tag {
     pub end: bool,
     pub id: u32,
 }
 
-
+/// An entire mux packet.
+///
+/// The `Message` type contains enough information to encode an
+/// entire packet.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message {
     pub tag: Tag,
     pub frame: MessageFrame,
 }
 
+/// Wrapper of the various mux packet types.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MessageFrame {
     Treq(Treq),
@@ -39,18 +51,32 @@ pub enum MessageFrame {
     Rdrain,
     Tping,
     Rping,
-    Rerr(String),
     Tdiscarded(Tdiscarded),
-    Tlease(Duration),   // Notification of a lease of resources for the specified duration
-    // Tdiscarded(String), // Sent by a client to alert the server of a discarded message
+    Tlease(Tlease),
+    Rerr(Rerr),
 }
 
+// Structs that model the message frame types of the mux protocol
+
+/// Representation of the mux `Treq` types.
 #[derive(PartialEq, Eq, Debug)]
 pub struct Treq {
     pub headers: Headers,
     pub body: Vec<u8>,
 }
 
+/// Representation of a mux `Rreq` and `Rdispatch` message body.
+#[derive(PartialEq, Eq, Debug)]
+pub enum Rmsg {
+    /// Successful response.
+    Ok(Vec<u8>),
+    /// Response failed. The `String` describes the error.
+    Error(String),
+    /// Negative acknowledgment. The `String` describes the reason.
+    Nack(String),
+}
+
+/// Representation of a mux `Tdispatch` frame.
 #[derive(PartialEq, Eq, Debug)]
 pub struct Tdispatch {
     pub contexts: Contexts,
@@ -59,52 +85,50 @@ pub struct Tdispatch {
     pub body: Vec<u8>,
 }
 
+/// Representation of a mux `Rdispatch` frame.
 #[derive(PartialEq, Eq, Debug)]
 pub struct Rdispatch {
     pub contexts: Contexts,
     pub msg: Rmsg,
 }
 
-#[derive(PartialEq, Eq, Debug)]
-pub enum Rmsg {
-    Ok(Vec<u8>),
-    Error(String),
-    Nack(String),
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct Tdiscarded {
-    pub id: u32,
-    pub msg: String,
-}
-
+/// Representation of a mux `Tinit` and `Rinit` frame.
 #[derive(PartialEq, Eq, Debug)]
 pub struct Init {
     pub version: u16,
     pub headers: Contexts,
 }
 
-impl Message {
-    #[inline]
-    pub fn end(id: u32, frame: MessageFrame) -> Message {
-        Message {
-            tag: Tag::new(true, id),
-            frame: frame,
-        }
-    }
+/// Representation of a mux `Tdiscarded` frame.
+#[derive(PartialEq, Eq, Debug)]
+pub struct Tdiscarded {
+    pub id: u32,
+    pub msg: String,
+}
+
+/// Representation of a mux `Tlease` frame.
+#[derive(PartialEq, Eq, Debug)]
+pub struct Tlease {
+    pub duration: Duration,
+}
+
+/// Representation of a mux `Rerr` frame.
+#[derive(PartialEq, Eq, Debug)]
+pub struct Rerr {
+    pub msg: String,
 }
 
 impl Tag {
     #[inline]
+    /// Construct a new `Tag`.
     pub fn new(end: bool, id: u32) -> Tag {
         assert!(id <= MAX_TAG);
         Tag { end: end, id: id, }
     }
 }
 
-
-
 impl MessageFrame {
+    /// Get the `i8` value coresponding the a `MessageFrame`.
     pub fn frame_id(&self) -> i8 {
         match *self {
             MessageFrame::Treq(_) => types::TREQ,
@@ -125,17 +149,14 @@ impl MessageFrame {
 }
 
 impl Tdispatch {
-    pub fn basic_(dest: String, body: Vec<u8>) -> Tdispatch {
+    /// Construct a new `Tdispatch` frame with the provided destination and body.
+    pub fn new(dest: String, body: Vec<u8>) -> Tdispatch {
         Tdispatch {
             contexts: Vec::new(),
             dest: dest,
             dtab: Dtab::new(),
             body: body,
         }
-    }
-
-    pub fn basic(dest: String, body: Vec<u8>) -> MessageFrame {
-        MessageFrame::Tdispatch(Tdispatch::basic_(dest, body))
     }
 }
 

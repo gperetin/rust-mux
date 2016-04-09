@@ -15,8 +15,8 @@ pub fn frame_size(frame: &MessageFrame) -> usize {
         MessageFrame::Tping => 0,
         MessageFrame::Rping => 0,
         MessageFrame::Tlease(_) => 9,
-        MessageFrame::Tdiscarded(ref m) => 3 + m.msg.as_bytes().len(),
-        MessageFrame::Rerr(ref msg) => msg.as_bytes().len(),
+        MessageFrame::Tdiscarded(ref f) => 3 + f.msg.as_bytes().len(),
+        MessageFrame::Rerr(ref r) => r.msg.as_bytes().len(),
     }
 }
 
