@@ -145,7 +145,7 @@ impl MuxSessionImpl {
         // only addresses messages intended for this channel
         match msg.frame {
             MessageFrame::Rdispatch(d) => Ok(d),
-            MessageFrame::Rerr(reason) => Err(io::Error::new(ErrorKind::Other, reason)),
+            MessageFrame::Rerr(rerr) => Err(io::Error::new(ErrorKind::Other, rerr.msg)),
 
             // the rest of these are unexpected messages at this point
             other => {
