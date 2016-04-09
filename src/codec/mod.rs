@@ -1,3 +1,9 @@
+//! Codec functions for encoding and decoding mux frames.
+//!
+//! Decode messages from a continuous stream using `read_message` to
+//! address message framing. Individual message decoding functions assume the
+//! remainder of the stream comprises the message.
+
 extern crate byteorder;
 
 use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
