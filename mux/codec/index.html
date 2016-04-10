@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `codec` mod in crate `mux`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, codec">
+
+    <title>mux::codec - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>mux</a></p><script>window.sidebarCurrent = {name: 'codec', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>mux</a>::<wbr><a class='mod' href=''>codec</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-74' class='srclink' href='../../src/mux/codec/mod.rs.html#1-589' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Codec functions for encoding and decoding mux frames.</p>
+
+<p>Decode messages from a continuous stream using <code>read_message</code> to
+address message framing. Individual message decoding functions assume the
+remainder of the stream comprises the message.</p>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='mod' href='size/index.html'
+                               title='mux::codec::size'>size</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_contexts.html'
+                               title='mux::codec::decode_contexts'>decode_contexts</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_dtab.html'
+                               title='mux::codec::decode_dtab'>decode_dtab</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_frame.html'
+                               title='mux::codec::decode_frame'>decode_frame</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously decode a mux <code>MessageFrame</code></p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_headers.html'
+                               title='mux::codec::decode_headers'>decode_headers</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_init.html'
+                               title='mux::codec::decode_init'>decode_init</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_message.html'
+                               title='mux::codec::decode_message'>decode_message</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously decode a mux <code>Message</code></p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_rdispatch.html'
+                               title='mux::codec::decode_rdispatch'>decode_rdispatch</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_rerr.html'
+                               title='mux::codec::decode_rerr'>decode_rerr</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_rreq.html'
+                               title='mux::codec::decode_rreq'>decode_rreq</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_tag.html'
+                               title='mux::codec::decode_tag'>decode_tag</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_tdiscarded.html'
+                               title='mux::codec::decode_tdiscarded'>decode_tdiscarded</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_tdispatch.html'
+                               title='mux::codec::decode_tdispatch'>decode_tdispatch</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_tlease.html'
+                               title='mux::codec::decode_tlease'>decode_tlease</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_treq.html'
+                               title='mux::codec::decode_treq'>decode_treq</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.decode_u16_string.html'
+                               title='mux::codec::decode_u16_string'>decode_u16_string</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_contexts.html'
+                               title='mux::codec::encode_contexts'>encode_contexts</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_dtab.html'
+                               title='mux::codec::encode_dtab'>encode_dtab</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_frame.html'
+                               title='mux::codec::encode_frame'>encode_frame</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously encode a <code>MessageFrame</code> to the <code>Write</code></p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_headers.html'
+                               title='mux::codec::encode_headers'>encode_headers</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_init.html'
+                               title='mux::codec::encode_init'>encode_init</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_message.html'
+                               title='mux::codec::encode_message'>encode_message</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously encode a <code>Message</code> to the <code>Write</code></p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_rdispatch.html'
+                               title='mux::codec::encode_rdispatch'>encode_rdispatch</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_rerr.html'
+                               title='mux::codec::encode_rerr'>encode_rerr</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_rreq.html'
+                               title='mux::codec::encode_rreq'>encode_rreq</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_tag.html'
+                               title='mux::codec::encode_tag'>encode_tag</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_tdiscarded.html'
+                               title='mux::codec::encode_tdiscarded'>encode_tdiscarded</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_tdispatch.html'
+                               title='mux::codec::encode_tdispatch'>encode_tdispatch</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_tlease.html'
+                               title='mux::codec::encode_tlease'>encode_tlease</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_treq.html'
+                               title='mux::codec::encode_treq'>encode_treq</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.encode_u16_string.html'
+                               title='mux::codec::encode_u16_string'>encode_u16_string</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.read_message.html'
+                               title='mux::codec::read_message'>read_message</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously read a whole mux <code>Message</code></p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.write_message.html'
+                               title='mux::codec::write_message'>write_message</a></td>
+                        <td class='docblock short'>
+                             <p>Synchronously encode a <code>Message</code> to the <code>Write</code> with the frame size</p>
+
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "mux";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

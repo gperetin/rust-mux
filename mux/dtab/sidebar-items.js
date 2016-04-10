@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Dentry","Single entry of the `Dtab`"],["Dtab","Delegate table."]]});
