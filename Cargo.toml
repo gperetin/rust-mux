@@ -6,6 +6,7 @@ authors = ["Bryce Anderson <bryce.anderson22@gmail.com>"]
 license = "Apache-2.0"
 
 description = "mux codecs for rust"
+keywords = ["protocol", "network", "session"]
 homepage = "https://github.com/bryce-anderson/rust-mux"
 repository = "https://github.com/bryce-anderson/rust-mux"
 
