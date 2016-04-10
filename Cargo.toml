@@ -8,6 +8,7 @@ license = "Apache-2.0"
 description = "mux codecs for rust"
 homepage = "https://github.com/bryce-anderson/rust-mux"
 repository = "https://github.com/bryce-anderson/rust-mux"
+documentation = "http://bryce-anderson.github.io/rust-mux"
 
 readme = "README.md"
 
