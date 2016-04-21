@@ -46,17 +46,17 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-765' class='srclink' href='../src/mux/lib.rs.html#84-91' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-765' class='srclink' href='../src/mux/src/lib.rs.html#84-91' title='goto source code'>[src]</a></span></h1>
 <pre class='rust enum'>pub enum Rmsg {
     Ok(<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;),
     Error(<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>),
     Nack(<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>),
 }</pre><div class='docblock'><p>Representation of a mux <code>Rreq</code> and <code>Rdispatch</code> message body.</p>
 </div><h2 class='variants'>Variants</h2>
-<table><tr><td id='variant.Ok'><code>Ok</code></td><td><div class='docblock'><p>Successful response containing a body.</p>
-</div></td></tr><tr><td id='variant.Error'><code>Error</code></td><td><div class='docblock'><p>Response failed. The <code>String</code> describes the error.</p>
-</div></td></tr><tr><td id='variant.Nack'><code>Nack</code></td><td><div class='docblock'><p>Negative acknowledgment. The <code>String</code> describes the reason.</p>
-</div></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#method.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
+<table class='variants_table'><tr><td id='variant.Ok'><code>Ok</code></td><td><div class='docblock'><p>Successful response containing a body.</p>
+</div></td><td></td></tr><tr><td id='variant.Error'><code>Error</code></td><td><div class='docblock'><p>Response failed. The <code>String</code> describes the error.</p>
+</div></td><td></td></tr><tr><td id='variant.Nack'><code>Nack</code></td><td><div class='docblock'><p>Negative acknowledgment. The <code>String</code> describes the reason.</p>
+</div></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#method.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
 </div><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/cmp/trait.Eq.html' title='core::cmp::Eq'>Eq</a> for <a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a></code></h3><div class='impl-items'></div><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html' title='core::cmp::PartialEq'>PartialEq</a> for <a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a></code></h3><div class='impl-items'><h4 id='method.eq' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html#method.eq' class='fnname'>eq</a>(&amp;self, __arg_0: &amp;<a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
 <h4 id='method.ne' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html#method.ne' class='fnname'>ne</a>(&amp;self, __arg_0: &amp;<a class='enum' href='../mux/enum.Rmsg.html' title='mux::Rmsg'>Rmsg</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
 </div></section>
@@ -102,7 +102,7 @@
 
                 <p>
                     Search functions by type signature (e.g.
-                    <code>vec -> usize</code>)
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
                 </p>
             </div>
         </div>

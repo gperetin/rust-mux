@@ -46,12 +46,13 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-145' class='srclink' href='../../src/mux/codec/mod.rs.html#76-85' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-145' class='srclink' href='../../src/mux/src/codec/mod.rs.html#76-85' title='goto source code'>[src]</a></span></h1>
 <pre class='rust fn'>pub fn decode_message&lt;R: <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Read.html' title='std::io::Read'>Read</a>&gt;(read: R) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='struct' href='../../mux/struct.Message.html' title='mux::Message'>Message</a>&gt;</pre><div class='docblock'><p>Synchronously decode a mux <code>Message</code></p>
 
 <p>This function will synchronously read from the provided <code>&amp;mut Read</code> until
 it has decoded a message. Message length is assumed to be triggered by an EOF.
 When using use a continuous stream, such as a <code>TcpStream</code>, use <code>read_message</code>.</p>
+
 <pre class='rust rust-example-rendered'>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::<span class='ident'>Cursor</span>;
 <span class='kw'>use</span> <span class='ident'>mux</span>::<span class='ident'>MessageFrame</span>;
@@ -103,7 +104,7 @@ When using use a continuous stream, such as a <code>TcpStream</code>, use <code>
 
                 <p>
                     Search functions by type signature (e.g.
-                    <code>vec -> usize</code>)
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
                 </p>
             </div>
         </div>
