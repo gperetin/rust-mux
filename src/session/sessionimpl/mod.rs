@@ -1,5 +1,3 @@
-extern crate time;
-
 use super::super::*;
 
 use byteorder::{WriteBytesExt, BigEndian, ByteOrder};
@@ -11,9 +9,9 @@ use std::net::TcpStream;
 
 use std::io;
 use std::io::{ErrorKind, Read, Write, BufReader, BufWriter};
-
-use std::sync::{Mutex, Condvar};
+use std::time;
 use std::time::Duration;
+use std::sync::{Mutex, Condvar};
 
 // Really only used in one place...
 enum Either<L,R> {
@@ -158,7 +156,7 @@ impl MuxSessionImpl {
 
     pub fn ping(&self) -> io::Result<Duration> {
         let id = try!(self.next_id());
-        let start = time::precise_time_ns();
+        let start = time::Instant::now();
 
         try!(self.wrap_write(true, id, |id, write| {
             let ping = Message {
@@ -171,10 +169,7 @@ impl MuxSessionImpl {
 
         let msg = try!(self.dispatch_read(id));
         match msg.frame {
-            MessageFrame::Rping => {
-                let elapsed = time::precise_time_ns() - start;
-                Ok(Duration::from_millis(elapsed / 1_000_000))
-            }
+            MessageFrame::Rping => Ok(start.elapsed()),
             invalid => {
                 let msg = format!("Received invalid reply for Ping: {:?}", invalid);
                 self.abort_session_proto(&msg)
