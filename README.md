@@ -1,5 +1,7 @@
 ## Mux Codec Tools for Rust
 
+### [Documentation](http://bryce-anderson.github.io/rust-mux/index.html)
+
 ### What is provided?
 - Message types
 - Message decoders
