@@ -20,4 +20,3 @@ debug = true
 
 [dependencies]
 byteorder = "0.5.1"
-time = "0.1.34"
