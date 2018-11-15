@@ -20,3 +20,5 @@ debug = true
 
 [dependencies]
 byteorder = "0.5"
+rand = "0.5"
+time = "0.1"
