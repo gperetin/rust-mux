@@ -19,6 +19,49 @@ For a ping message use this `nc` line:
     python -c 'import binascii, sys; sys.stdout.write(binascii.unhexlify("00000004BF000002"))' | nc -l 9000 | xxd
 
 
+#### Client testing with a Scala server
+
+To test the client implementation written in Rust against a Scala server,
+clone [Finagle repo](https://github.com/twitter/finagle) and go to
+`finagle/doc/src/sphinx/code/quickstart`.
+
+Add `finagle-mux` dependency in `build.sbt` so it looks like this:
+
+```
+name := "quickstart"
+
+version := "1.0"
+
+scalaVersion := "2.12.1"
+
+libraryDependencies += "com.twitter" %% "finagle-http" % "18.11.0"
+libraryDependencies += "com.twitter" %% "finagle-mux" % "18.11.0"
+```
+
+Then change `Server.scala` to work with Mux:
+
+```scala
+import com.twitter.finagle.{Service, Mux}
+import com.twitter.finagle.mux
+import com.twitter.util.{Await, Future}
+
+object Server extends App {
+  val service = new Service[mux.Request, mux.Response] {
+    def apply(req: mux.Request): Future[mux.Response] =
+      Future.value(
+        mux.Response.empty
+      )
+  }
+
+  val server = Mux.serve(":8080", service)
+  Await.ready(server)
+}
+```
+
+This will start listening on `localhost:8080` and will always return an empty
+Mux response.
+
+
 ### What is provided?
 - Message types
 - Message decoders
