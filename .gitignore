@@ -5,3 +5,7 @@ Cargo.lock
 callgrind.**
 cachegrind.**
 
+**.jar
+
+tests/integration-server/project
+tests/integration-server/target
