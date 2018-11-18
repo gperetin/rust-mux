@@ -19,41 +19,41 @@ fn test_session(socket: TcpStream) {
 
     let session = Arc::new(MuxSession::new(socket).unwrap());
 
-    let iters = 1;
-    let threadc = 1;
+    let iters = 10;
+    let threadc = 5;
 
     let startt = time::get_time();
 
-    let threads: Vec<thread::JoinHandle<Duration>> = (0..threadc).map(|id| {
-        let session = session.clone();
+    let threads: Vec<thread::JoinHandle<Duration>> = (0..threadc)
+        .map(|id| {
+            let session = session.clone();
+            thread::spawn(move || {
+                let mut ping_time = Duration::new(0, 0);
+                let mut pingc = 0;
+                for _ in 0..iters {
+                    if rand::random::<u8>() > 64 {
+                        let b = format!("Hello, world: {}", id).into_bytes();
+                        let frame = mux::Tdispatch::new("/foo".to_string(), b);
 
-        thread::spawn(move || {
-            let mut ping_time = Duration::new(0, 0);
-            let mut pingc = 0;
-            for _ in 0..iters {
-                // if rand::random::<u8>() > 64 {
-                    let b = format!("Hello, world: {}", id).into_bytes();
-                    let frame = mux::Tdispatch::new("/foo".to_string(), b);
-
-                    let msg = session.dispatch(&frame).unwrap();
-                    if let Rmsg::Ok(body) = msg.msg {
-                        let response = String::from_utf8(body).unwrap();
-                        println!("We got: {}", response);
+                        let msg = session.dispatch(&frame).unwrap();
+                        if let Rmsg::Ok(body) = msg.msg {
+                            let response = String::from_utf8(body).unwrap();
+                            println!("We got: {}", response);
+                        } else {
+                            panic!("Error during mux request!");
+                        }
+                    // Commented out until we figure out how to have a mock server
+                    // that can differentiate betweet ping an dispatch messages
+                    // and return a proper response
                     } else {
-                        panic!("Error during mux request!");
+                        ping_time = ping_time + session.ping().unwrap();
+                        pingc += 1;
                     }
-                // Commented out until we figure out how to have a mock server
-                // that can differentiate betweet ping an dispatch messages
-                // and return a proper response
-                // } else {
-                    // ping_time = ping_time + session.ping().unwrap();
-                    // pingc += 1;
-                // }
-            }
+                }
 
-            ping_time/max(1, pingc)
-        })
-    }).collect();
+                ping_time / max(1, pingc)
+            })
+        }).collect();
 
     let mut total_ping = Duration::new(0, 0);
     let threadc = threads.len() as u32;
@@ -63,15 +63,19 @@ fn test_session(socket: TcpStream) {
 
     let rps = {
         let elapsed = time::get_time() - startt;
-        ((iters*threadc) as f32/(elapsed.num_milliseconds() as f32)) * 1e3
+        ((iters * threadc) as f32 / (elapsed.num_milliseconds() as f32)) * 1e3
     };
 
-    println!("Finished. Rps: {}. Mean Ping: {:?}", rps, total_ping/threadc);
+    println!(
+        "Finished. Rps: {}. Mean Ping: {:?}",
+        rps,
+        total_ping / threadc
+    );
 }
 
 fn main() {
-  let socket = TcpStream::connect(("localhost", 9000)).unwrap();
-  test_session(socket);
+    let socket = TcpStream::connect(("localhost", 8080)).unwrap();
+    test_session(socket);
 }
 
 #[cfg(test)]
@@ -84,15 +88,16 @@ mod tests {
     }
 
     fn test_crate(subcrate: &str) {
-
         let status = Command::new("cargo")
             .args(&["test", "-p", subcrate])
             .status()
             .unwrap();
 
-        assert!(status.success(),
-                "test for sub-crate: {} returned: {:?}",
-                subcrate,
-                status.code().unwrap());
+        assert!(
+            status.success(),
+            "test for sub-crate: {} returned: {:?}",
+            subcrate,
+            status.code().unwrap()
+        );
     }
 }
