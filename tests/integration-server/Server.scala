@@ -7,7 +7,7 @@ object Server extends App {
   val service = new Service[mux.Request, mux.Response] {
     def apply(req: mux.Request): Future[mux.Response] =
       Future.value(
-        mux.Response(Buf.Utf8("Some string"))
+        mux.Response(req.body)
       )
   }
 
